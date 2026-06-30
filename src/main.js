@@ -23,6 +23,9 @@ const ltr = s => `<span class="ltr">${s}</span>`;                         // ر�
 const sar = n => ltr(num(n));                                             // مبلغ
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
+/* ---------- رقم الإصدار ---------- */
+const APP_VERSION = '1.1.0';
+
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
 
@@ -35,6 +38,7 @@ const META = {
   compliance: { t: 'التوزيع والالتزام',  s: 'تصنيف المحطات وتوزيع تجاوز الشرائح' },
   quality:    { t: 'جودة البيانات',      s: 'محطات ناقصة وتجاوزات سعرية وأخطاء مسافات' },
   audit:      { t: 'مركز التدقيق المحاسبي', s: 'تقرير رسمي · أسباب الهدر · توصيات المعالجة · كشف الشذوذ · المقارنة الشهرية' },
+  plan:       { t: 'خطة العمل حسب الفترات', s: 'خطة معالجة مرحلية بأثر مالي محسوب · متابعة الاتجاه عبر الأشهر' },
 };
 
 /* ---------- التنقل ---------- */
@@ -53,11 +57,14 @@ function render(pg) {
   if      (pg === 'overview')   c.innerHTML = viewOverview();
   else if (pg === 'alerts')   { c.innerHTML = viewAlerts();   wireAlerts(); }
   else if (pg === 'stations') { c.innerHTML = viewStations(); wireStations(); }
+  else if (pg === 'plan')     { c.innerHTML = viewPlan();     wirePlan(); }
   else if (pg === 'map')      { c.innerHTML = viewMap();      initMap(); }
   else if (pg === 'trips')      c.innerHTML = viewTrips();
   else if (pg === 'compliance') c.innerHTML = viewCompliance();
   else if (pg === 'quality')  { c.innerHTML = viewQuality();  wireQuality(); }
   else if (pg === 'audit')    { c.innerHTML = viewAudit();    wireAudit(); }
+  // انتقال ظهور لطيف عند كل تنقّل
+  c.classList.remove('page-in'); void c.offsetWidth; c.classList.add('page-in');
 }
 
 /* ---------- عناصر رسومية مشتركة ---------- */
@@ -543,6 +550,98 @@ function auditHistory(save) {
   return hist;
 }
 
+/* ============================================================
+   خطة العمل حسب الفترات — صفحة مستقلة
+   خطة معالجة مرحلية بأثر مالي محسوب + متابعة الاتجاه عبر الأشهر
+   ============================================================ */
+function viewPlan() {
+  const A = auditAnalyze();
+  const L = AGG.loadEff || { consolSaving: 0, consolGroups: 0, consolTrips: 0, consolAnnual: 0 };
+  const hist = auditHistory(true); // احفظ ملخّص الفترة الحالية لتظهر في المسار الزمني فوراً
+
+  const monthly = (A.totalReroute || 0) + (L.consolSaving || 0);
+  const annual = monthly * 12 + (A.wPover || 0);
+  const targetWaste = Math.max(0, AGG.waste - (A.totalReroute || 0));
+  const wasteCut = AGG.waste ? Math.round(100 * (A.totalReroute || 0) / AGG.waste) : 0;
+
+  const hero = `<div class="plan-hero">
+    <h3>خطة معالجة الهدر — ${AGG.period}</h3>
+    <p>خطة عمل مرحلية مرتّبة حسب الأولوية والأثر المالي، مبنية على نتائج تدقيق الفترة الحالية. كل مرحلة محسوبة بالريال مع مسؤول وإطار زمني مقترح، وقابلة للمتابعة عبر الفترات.</p>
+    <div class="ph-period">📅 الفترة: ${AGG.period} · ${num(AGG.total)} ردة مدققة</div>
+  </div>`;
+
+  const kpis = `<div class="plan-kpis">
+    <div class="pk k-save"><div class="pk-l">وفر فوري — إعادة التوجيه</div><div class="pk-v">${num(A.totalReroute)}</div><div class="pk-s">ر.س / شهر · ${A.reroute.length} محطة</div></div>
+    <div class="pk k-recover"><div class="pk-l">قابل للاسترداد — تصحيح سعري</div><div class="pk-v">${num(A.wPover)}</div><div class="pk-s">ر.س · ${A.anomalies.pover.length} حالة</div></div>
+    <div class="pk k-annual"><div class="pk-l">الأثر السنوي المقدّر</div><div class="pk-v">${num(annual)}</div><div class="pk-s">ر.س / سنة عند الالتزام بالخطة</div></div>
+    <div class="pk k-target"><div class="pk-l">خفض الهدر المستهدف</div><div class="pk-v">${wasteCut}%</div><div class="pk-s">من ${sar(AGG.waste)} إلى ${sar(targetWaste)}</div></div>
+  </div>`;
+
+  let strip;
+  if (hist.length) {
+    const items = hist.map((h, i) => {
+      const prev = hist[i - 1];
+      let d = '<span class="ps-d ps-flat">— الأساس</span>';
+      if (prev) {
+        const diff = h.waste - prev.waste;
+        if (diff < 0) d = `<span class="ps-d ps-down">▼ ${num(Math.abs(diff))}</span>`;
+        else if (diff > 0) d = `<span class="ps-d ps-up">▲ ${num(diff)}</span>`;
+        else d = '<span class="ps-d ps-flat">= ثابت</span>';
+      }
+      const cur = h.period === AGG.period ? ' cur' : '';
+      return `<div class="pstep${cur}"><div class="ps-p">${h.period}</div><div class="ps-w">${num(h.waste)} <small style="font-size:10px;color:var(--muted);font-weight:500">ر.س هدر</small></div><div class="ps-c">التزام ${h.compliance}% · ${num(h.total)} ردة</div>${d}</div>`;
+    }).join('');
+    strip = `<div class="card"><h4 style="margin-bottom:4px">مسار الأداء عبر الفترات</h4>
+      <p class="hint" style="margin:2px 0 12px">كل فترة تُحفظ تلقائياً عند رفع فاتورتها. السهم يقارن الهدر بالفترة السابقة.</p>
+      <div class="period-strip">${items}</div></div>`;
+  } else {
+    strip = `<div class="card"><div class="plan-empty">لا فترات محفوظة بعد — ستظهر هنا تلقائياً عند رفع فواتير الأشهر لبناء خط زمني للمقارنة والاتجاه.</div></div>`;
+  }
+
+  const top5 = A.reroute.slice(0, 5);
+  const phase1 = `<div class="phase p-urgent">
+    <div class="phase-hd"><div class="phase-num">١</div>
+      <div class="phase-t"><h4>إعادة توجيه التوريد لأقرب مركز</h4><div class="ph-meta">عاجل · أثر مباشر بلا تكلفة إضافية · المسؤول: إدارة التشغيل والتوريد</div></div>
+      <div class="phase-impact"><div class="pi-v">${num(A.totalReroute)}</div><div class="pi-l">ر.س / شهر</div></div></div>
+    <div class="phase-body">
+      <div class="phase-meta-row">
+        <span class="pchip">محطات للمعالجة: <b>${A.reroute.length}</b></span>
+        <span class="pchip">الإطار الزمني: <b>٣٠ يومًا</b></span>
+        <span class="pchip">الأثر السنوي: <b>${num(A.totalReroute * 12)}</b> ر.س</span>
+      </div>
+      ${top5.length ? `<div class="tbl-wrap"><table class="dt"><thead><tr><th class="txt">المحطة</th><th class="txt">المركز الأقرب الموصى به</th><th class="n">وفر شهري</th></tr></thead><tbody>
+        ${top5.map(r => `<tr class="rowlink" data-sno="${r.sno}"><td class="txt"><b>${r.sno}</b> ${r.nm}</td><td class="txt">${r.bench}</td><td class="n">${sar(r.saving)}</td></tr>`).join('')}
+      </tbody></table></div>${A.reroute.length > 5 ? `<p class="hint" style="margin-top:8px">أعلى 5 من ${A.reroute.length} محطة — التفاصيل الكاملة في مركز التدقيق المحاسبي.</p>` : ''}` : '<p class="hint" style="margin:0">لا فرص إعادة توجيه في هذه الفترة. ✓</p>'}
+    </div></div>`;
+
+  const phase2 = `<div class="phase p-recover">
+    <div class="phase-hd"><div class="phase-num">٢</div>
+      <div class="phase-t"><h4>تصحيح التجاوزات السعرية ومطالبة المورّد</h4><div class="ph-meta">استرداد · مراجعة تعاقدية · المسؤول: إدارة العقود والمشتريات</div></div>
+      <div class="phase-impact"><div class="pi-v">${num(A.wPover)}</div><div class="pi-l">ر.س قابلة للاسترداد</div></div></div>
+    <div class="phase-body"><div class="phase-meta-row">
+      <span class="pchip">حالات سعرية: <b>${A.anomalies.pover.length}</b></span>
+      <span class="pchip">الإطار الزمني: <b>٦٠ يومًا</b></span>
+      <span class="pchip">الإجراء: <b>مطالبة بالفرق أو تصحيح التعرفة</b></span>
+    </div><p class="hint" style="margin:0">${A.anomalies.pover.length ? `فُوتِرت ${A.anomalies.pover.length} حالة بأعلى من سعر جدول الشريحة — راجع تبويب «كشف الشذوذ» في مركز التدقيق لتفاصيل كل حالة.` : 'لا تجاوزات سعرية مرصودة في هذه الفترة. ✓'}</p>
+    </div></div>`;
+
+  const phase3 = `<div class="phase p-improve">
+    <div class="phase-hd"><div class="phase-num">٣</div>
+      <div class="phase-t"><h4>تحسين كفاءة الحمولة ودمج الردود</h4><div class="ph-meta">تحسين تشغيلي · يحتاج تأكيد جدولة · المسؤول: التخطيط اللوجستي</div></div>
+      <div class="phase-impact"><div class="pi-v">${num(L.consolSaving)}</div><div class="pi-l">ر.س / شهر (محتمل)</div></div></div>
+    <div class="phase-body"><div class="phase-meta-row">
+      <span class="pchip">مجموعات قابلة للدمج: <b>${num(L.consolGroups)}</b></span>
+      <span class="pchip">ردود مشمولة: <b>${num(L.consolTrips)}</b></span>
+      <span class="pchip">الأثر السنوي: <b>${num(L.consolAnnual)}</b> ر.س</span>
+    </div><p class="hint" style="margin:0">دمج الردود الصغيرة في ناقلات أكبر ضمن سعة خزان كل محطة — فرصة تحتاج تأكيداً تشغيلياً قبل التنفيذ. التفاصيل في تبويب «كفاءة الحمولة».</p>
+    </div></div>`;
+
+  return `<div class="plan-wrap">${hero}${kpis}${strip}${phase1}${phase2}${phase3}</div>`;
+}
+function wirePlan() {
+  $$('.plan-wrap .rowlink').forEach(r => r.onclick = () => openModal(+r.dataset.sno));
+}
+
 function viewAudit() {
   const A = auditAnalyze();
   const sav = (n) => `<b style="color:var(--ok)">${sar(n)}</b>`;
@@ -894,6 +993,7 @@ function boot() {
 
   // شريط جانبي + رأس
   $('#logout').onclick = () => { sessionStorage.removeItem('aldrees_auth'); $('#loginOv').style.display = 'flex'; };
+  { const av = $('#appVer'); if (av) av.textContent = APP_VERSION; }
   $('#sbPeriod').textContent = AGG.period;
   $('#nbAlerts').textContent = num((AGG.tiers['عالي'] || 0) + (AGG.tiers['متوسط'] || 0));
   $('#nbQual').textContent = num(AGG.proxy_stations);
