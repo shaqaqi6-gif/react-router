@@ -10,6 +10,10 @@ window.L = L;            // حارس waitL() القديم يفحص window.L
 let AGG = initialAGG;    // قابلان لإعادة الإسناد عند رفع فاتورة
 let STATIONS = initialStations;
 
+/* ---------- رقم إصدار النظام ---------- */
+const APP_VERSION = '2.1.0';
+const APP_BUILD   = '2026-07';   // فترة الإصدار
+
 /* ============================================================
    نظام تدقيق نقليات الدريس — منطق التطبيق (نسخة نظيفة)
    البيانات مُعرّفة مسبقاً كثوابت متزامنة: AGG, STATIONS, GEO, CENTERS, RM
@@ -35,6 +39,7 @@ const META = {
   compliance: { t: 'التوزيع والالتزام',  s: 'تصنيف المحطات وتوزيع تجاوز الشرائح' },
   quality:    { t: 'جودة البيانات',      s: 'محطات ناقصة وتجاوزات سعرية وأخطاء مسافات' },
   audit:      { t: 'مركز التدقيق المحاسبي', s: 'تقرير رسمي · أسباب الهدر · توصيات المعالجة · كشف الشذوذ · المقارنة الشهرية' },
+  plan:       { t: 'خطة العمل حسب الفترات', s: 'خارطة طريق تنفيذية مرحلية لمعالجة الهدر — بأثر مالي مُقدّر لكل فترة' },
 };
 
 /* ---------- التنقل ---------- */
@@ -58,6 +63,7 @@ function render(pg) {
   else if (pg === 'compliance') c.innerHTML = viewCompliance();
   else if (pg === 'quality')  { c.innerHTML = viewQuality();  wireQuality(); }
   else if (pg === 'audit')    { c.innerHTML = viewAudit();    wireAudit(); }
+  else if (pg === 'plan')     { c.innerHTML = viewPlan();     wirePlan(); }
 }
 
 /* ---------- عناصر رسومية مشتركة ---------- */
@@ -730,6 +736,180 @@ function exportAuditReport() {
   a.download = `تقرير_التدقيق_${AGG.period}.csv`; a.click();
 }
 
+/* ============================================================
+   خطة العمل حسب الفترات — صفحة مستقلة (خارطة طريق تنفيذية)
+   تُبنى ديناميكياً من تحليل التدقيق: كل فترة زمنية لها هدف
+   وإجراءات وأثر مالي مُقدّر بالريال.
+   ============================================================ */
+function planAnalyze() {
+  const A = auditAnalyze();
+  const L = AGG.loadEff || { consolSaving: 0, consolAnnual: 0, consolTrips: 0, consolGroups: 0 };
+
+  // 1) تركيز الهدر (Pareto): كم محطة تصنع 80% من الهدر القابل للمعالجة
+  const rr = A.reroute.slice().sort((a, b) => b.saving - a.saving);
+  const totalRR = A.totalReroute || 0;
+  let cum = 0, pareto = 0;
+  for (const r of rr) { cum += r.saving; pareto++; if (cum >= totalRR * 0.8) break; }
+
+  // 2) الهدر حسب المنطقة (من المحطات المُقاسة)
+  const byReg = {};
+  for (const s of Object.values(STATIONS)) {
+    if (s.cov !== 'benchmark' || !(s.waste > 0)) continue;
+    const reg = s.reg || 'غير محدد';
+    byReg[reg] = (byReg[reg] || 0) + s.waste;
+  }
+  const regRows = Object.entries(byReg).map(([nm, v]) => ({ nm, v })).sort((a, b) => b.v - a.v).slice(0, 6);
+
+  // 3) تقسيم الوفر إلى دفعات زمنية
+  const topN = Math.min(10, rr.length);
+  const topReroute = rr.slice(0, topN).reduce((t, r) => t + r.saving, 0);
+  const restReroute = Math.max(0, totalRR - topReroute);
+  const priceRecover = A.wPover || 0;
+  const consol = L.consolSaving || 0;
+  const monthlyPotential = totalRR + priceRecover + consol;
+  const annualPotential = (totalRR + consol) * 12 + priceRecover; // الاسترداد السعري مرة واحدة
+
+  return {
+    A, L, rr, totalRR, pareto, topN, topReroute, restReroute,
+    priceRecover, consol, monthlyPotential, annualPotential, regRows,
+  };
+}
+function taskItem(kind, html, amt) {
+  const cls = kind === 'key' ? 't-key' : kind === 'ok' ? 't-ok' : 't-do';
+  const mark = kind === 'ok' ? '✓' : kind === 'key' ? '★' : '›';
+  return `<li><span class="tk ${cls}">${mark}</span><span>${html}</span>${amt != null ? `<span class="tk-amt">${sar(amt)} ر.س</span>` : ''}</li>`;
+}
+function phaseCard(p) {
+  const whenCls = p.state === 'now' ? 'w-now' : p.state === 'done' ? 'w-done' : '';
+  return `<div class="phase ${p.state || ''}">
+    <div class="phase-card">
+      <div class="phase-hd">
+        <div class="phase-ttl"><span class="pico">${p.ico}</span>${p.title}</div>
+        <span class="phase-when ${whenCls}">${p.when}</span>
+      </div>
+      ${p.impact != null ? `<div class="phase-impact"><span class="pi-v">${sar(p.impact)}</span><span class="pi-l">${p.impactL || 'وفر/استرداد مُقدّر'}</span></div>` : ''}
+      <div class="phase-goal">${p.goal}</div>
+      <ul class="task-list">${p.tasks.join('')}</ul>
+    </div>
+  </div>`;
+}
+function viewPlan() {
+  const P = planAnalyze();
+  const period = AGG.period;
+
+  const hero = `
+  <div class="plan-hero">
+    <div class="ph-in">
+      <div>
+        <div class="ph-eyebrow">خارطة طريق تنفيذية · ${period} <span class="ph-badge">الإصدار ${ltr('v' + APP_VERSION)}</span></div>
+        <h2>خطة معالجة الهدر على أربع فترات زمنية</h2>
+        <div class="ph-sub">تُبنى الخطة آلياً من نتائج التدقيق: تبدأ بأعلى المحطات هدراً (كسب سريع) وتتدرّج حتى المعالجة الهيكلية السنوية. كل فترة لها هدف وإجراءات وأثر مالي بالريال.</div>
+      </div>
+      <div class="ph-kpis">
+        <div class="ph-k"><div class="v good">${sar(P.monthlyPotential)}</div><div class="l">إجمالي الفرصة الشهرية (ر.س)</div></div>
+        <div class="ph-k"><div class="v">${sar(P.annualPotential)}</div><div class="l">الأثر السنوي المُقدّر (ر.س)</div></div>
+        <div class="ph-k"><div class="v warn">${num(P.rr.length)}</div><div class="l">محطة قابلة للمعالجة</div></div>
+      </div>
+    </div>
+  </div>`;
+
+  // الفترات الأربع
+  const phases = [
+    {
+      ico: '⚡', title: 'الفترة الفورية', when: 'خلال ٣٠ يوماً', state: 'now',
+      impact: P.topReroute + P.priceRecover, impactL: 'كسب سريع مُقدّر',
+      goal: `التركيز على أعلى <b>${P.topN}</b> محطة هدراً — وهي وحدها تُشكّل الجزء الأكبر من الفرصة — مع مطالبة المورّد باسترداد التجاوزات السعرية القابلة للتوثيق فوراً.`,
+      tasks: [
+        taskItem('key', `إعادة توجيه أعلى <b>${P.topN}</b> محطة إلى أقرب مركز أرامكو`, P.topReroute),
+        taskItem('key', `مطالبة المورّد بفروق <b>${num(P.A.anomalies.pover.length)}</b> تجاوز سعري موثّق`, P.priceRecover),
+        taskItem('do', 'اعتماد قائمة «أقرب مركز» كمرجع إلزامي لأوامر التوريد'),
+        taskItem('do', 'تجميد التوريد من المراكز الأبعد للمحطات الحرجة'),
+      ],
+    },
+    {
+      ico: '📅', title: 'الفترة القصيرة', when: '١ – ٣ أشهر', state: 'next',
+      impact: P.restReroute, impactL: 'وفر إضافي مُقدّر',
+      goal: `تعميم إعادة التوجيه على بقية المحطات (<b>${num(Math.max(0, P.rr.length - P.topN))}</b> محطة)، واستكمال جودة البيانات حتى يصبح التدقيق كاملاً بلا محطات ناقصة.`,
+      tasks: [
+        taskItem('do', 'إعادة توجيه بقية المحطات ذات الهدر المتوسط والمنخفض', P.restReroute),
+        taskItem('do', `إضافة <b>${num(AGG.proxy_stations || 0)}</b> محطة ناقصة إلى ملف المرجع (المسافات)`),
+        taskItem('do', 'تثبيت تصحيح مسار السيل لمحطات الطائف في النظام'),
+        taskItem('do', 'مطابقة شهرية للأجر المفوتر مقابل جدول الشرائح'),
+      ],
+    },
+    {
+      ico: '⚙️', title: 'الفترة المتوسطة', when: '٣ – ٦ أشهر', state: 'next',
+      impact: P.consol, impactL: 'وفر لوجستي مُقدّر',
+      goal: `الانتقال من معالجة المسافة إلى كفاءة الحمولة: دمج الردود الصغيرة القابلة للتجميع في ناقلات أكبر وأرخص للّتر، ضمن سعة خزان كل محطة.`,
+      tasks: [
+        taskItem('do', `تفعيل دمج <b>${num(P.L.consolTrips || 0)}</b> ردة قابلة للتجميع`, P.consol),
+        taskItem('do', 'مراجعة تعرفة المورّد مقابل جدول الشرائح المعتمد'),
+        taskItem('do', 'جدولة التوريد لرفع نسبة امتلاء الناقلات الكبيرة'),
+      ],
+    },
+    {
+      ico: '🏛️', title: 'الفترة الاستراتيجية', when: '٦ – ١٢ شهراً', state: 'next',
+      impact: P.annualPotential, impactL: 'أثر سنوي تراكمي',
+      goal: `ترسيخ المكاسب مؤسسياً: أتمتة التدقيق الشهري، ولوحة مؤشرات للمتابعة، وحوكمة تمنع تكرار الهدر — لتحويل الوفر من حدث لمرّة إلى نتيجة مستدامة.`,
+      tasks: [
+        taskItem('key', 'أتمتة التدقيق الشهري لرفع الفواتير آلياً ومقارنة الاتجاه'),
+        taskItem('do', 'لوحة مؤشرات (KPIs) للالتزام والهدر لكل مركز ومنطقة'),
+        taskItem('do', 'ربط الأداء بمستهدفات خفض الهدر ربع السنوية'),
+        taskItem('ok', `تحقيق أثر سنوي تراكمي مُقدّر بـ ${sar(P.annualPotential)} ر.س`),
+      ],
+    },
+  ];
+  const timeline = `<div class="card"><div class="card-hd"><h3>خارطة الطريق الزمنية</h3><button class="btn ghost sm" id="expPlan">⤓ تصدير الخطة</button></div>
+    <div class="timeline">${phases.map(phaseCard).join('')}</div></div>`;
+
+  // ===== التحليل الشامل =====
+  const maxReg = Math.max(...P.regRows.map(r => r.v), 1);
+  const regBars = P.regRows.map(r => `<div class="wf-row">
+      <div class="wf-nm" title="${r.nm}">${r.nm}</div>
+      <div class="wf-track"><div class="wf-fill" style="width:${Math.max(3, 100 * r.v / maxReg)}%;background:linear-gradient(90deg,#1B95D3,#0F6FA3)"></div></div>
+      <div class="wf-v">${sar(r.v)}</div>
+    </div>`).join('') || '<p class="hint">لا بيانات إقليمية.</p>';
+
+  const wfItems = [
+    { nm: 'إعادة التوجيه', v: P.totalRR, c: '#15a075' },
+    { nm: 'استرداد سعري', v: P.priceRecover, c: '#dd8a08' },
+    { nm: 'دمج الحمولة', v: P.consol, c: '#1B95D3' },
+  ].filter(x => x.v > 0);
+  const maxWf = Math.max(...wfItems.map(x => x.v), 1);
+  const wfBars = wfItems.map(x => `<div class="wf-row">
+      <div class="wf-nm">${x.nm}</div>
+      <div class="wf-track"><div class="wf-fill" style="width:${Math.max(3, 100 * x.v / maxWf)}%;background:${x.c}"></div></div>
+      <div class="wf-v">${sar(x.v)}</div>
+    </div>`).join('');
+
+  const paretoPct = P.rr.length ? Math.round(100 * P.pareto / P.rr.length) : 0;
+  const analysis = `
+  <div class="analysis-grid">
+    <div class="card"><h4>🗺️ تركّز الهدر حسب المنطقة</h4>${regBars}
+      <p class="hint" style="margin-top:12px">أعلى المناطق هدراً — ابدأ المعالجة الجغرافية من الأعلى لأقصى أثر بأقل جهد.</p></div>
+    <div class="card"><h4>💧 مصادر الوفر (شهرياً)</h4>${wfBars}
+      <div class="mini-legend">${wfItems.map(x => `<span><i style="background:${x.c}"></i>${x.nm}</span>`).join('')}</div>
+      <p class="hint" style="margin-top:10px">توزيع إجمالي الفرصة الشهرية <b>${sar(P.monthlyPotential)}</b> ر.س على مساراتها الثلاثة.</p></div>
+  </div>
+  <div class="pareto-note">🎯 <b>قاعدة ٨٠/٢٠:</b> نحو <b>${num(P.pareto)}</b> محطة فقط (${paretoPct}% من المحطات المخالفة) تُشكّل <b>٨٠٪</b> من الهدر القابل للمعالجة — معالجتها أولاً في «الفترة الفورية» تحقّق أكبر أثر بأقل جهد.</div>`;
+
+  return `<div class="plan-page">${hero}${timeline}${analysis}</div>`;
+}
+function wirePlan() {
+  const ep = $('#expPlan');
+  if (ep) ep.onclick = () => {
+    const P = planAnalyze();
+    const rows = [
+      ['الفترة', 'الإطار الزمني', 'الأثر المالي المُقدّر (ر.س)', 'المحور'],
+      ['الفورية', 'خلال 30 يوماً', P.topReroute + P.priceRecover, 'إعادة توجيه أعلى المحطات + استرداد سعري'],
+      ['القصيرة', '1 - 3 أشهر', P.restReroute, 'تعميم إعادة التوجيه + استكمال المرجع'],
+      ['المتوسطة', '3 - 6 أشهر', P.consol, 'دمج الحمولة + مراجعة التعرفة'],
+      ['الاستراتيجية', '6 - 12 شهراً', P.annualPotential, 'أتمتة التدقيق والحوكمة (أثر سنوي)'],
+    ];
+    csvRaw(rows.map(r => r.map(c => typeof c === 'string' ? `"${c}"` : c).join(',')), `خطة_العمل_${AGG.period}.csv`);
+  };
+}
+
 function viewQuality() {
   const kpis = kpiRow([
     { ic: '📍', v: sar(AGG.proxy_stations), l: 'محطات تحتاج إضافة للمرجع ' + infoDot('المحطات الناقصة'), cls: 'warn' },
@@ -894,6 +1074,11 @@ function boot() {
 
   // شريط جانبي + رأس
   $('#logout').onclick = () => { sessionStorage.removeItem('aldrees_auth'); $('#loginOv').style.display = 'flex'; };
+  // رقم الإصدار في جميع المواضع
+  { const vtxt = `الإصدار ${'v' + APP_VERSION}`;
+    const vp = $('#verPill'); if (vp) vp.textContent = vtxt;
+    const sv = $('#sbVer');   if (sv) sv.textContent = `${vtxt} · ${APP_BUILD}`;
+    const lv = $('#loginVer');if (lv) lv.textContent = `${'v' + APP_VERSION}`; }
   $('#sbPeriod').textContent = AGG.period;
   $('#nbAlerts').textContent = num((AGG.tiers['عالي'] || 0) + (AGG.tiers['متوسط'] || 0));
   $('#nbQual').textContent = num(AGG.proxy_stations);

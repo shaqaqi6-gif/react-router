@@ -32,7 +32,7 @@
       <div class="login-err" id="lerr"></div>
       <div class="login-secure">🔒 اتصال آمن ومشفّر</div>
     </div>
-    <div class="login-foot">© شركة الدريس للخدمات البترولية والنقل</div>
+    <div class="login-foot">© شركة الدريس للخدمات البترولية والنقل <span class="lf-ver" id="loginVer"></span></div>
   </div>
 </div>
 <div class="app">
@@ -45,21 +45,23 @@
       <button class="nav-item" data-pg="stations"><span class="ico">🏢</span> بيان المحطات</button>
       <div class="grp">الخبير المحاسبي</div>
       <button class="nav-item nav-audit" data-pg="audit"><span class="ico">🧮</span> مركز التدقيق المحاسبي</button>
+      <button class="nav-item" data-pg="plan"><span class="ico">🗂️</span> خطة العمل حسب الفترات</button>
       <div class="grp">الأدوات</div>
       <button class="nav-item" data-pg="map"><span class="ico">🗺️</span> خريطة المسارات</button>
       <button class="nav-item" data-pg="trips"><span class="ico">🚚</span> تحليل النقليات</button>
       <button class="nav-item" data-pg="compliance"><span class="ico">🎯</span> التوزيع والالتزام</button>
       <button class="nav-item" data-pg="quality"><span class="ico">🛡️</span> جودة البيانات <span class="badge" id="nbQual">—</span></button>
     </nav>
-    <div class="sb-foot"><div>فترة التحليل</div><div class="period" id="sbPeriod">—</div><button id="logout">⎋ تسجيل الخروج</button></div>
+    <div class="sb-foot"><div class="sbf-label">فترة التحليل</div><div class="period" id="sbPeriod">—</div><div class="sb-ver" id="sbVer">—</div><button id="logout">⎋ تسجيل الخروج</button></div>
   </aside>
   <div class="main">
     <header class="topbar">
-      <div style="display:flex;align-items:center;gap:12px">
-        <button class="hamb" id="hamb">☰</button>
-        <div><h2 id="pgTitle">لوحة التحكم</h2><div class="pg-sub" id="pgSub">الأساس: التكلفة الواجبة من أقرب مركز</div></div>
+      <div class="tb-start">
+        <button class="hamb" id="hamb" aria-label="القائمة">☰</button>
+        <div class="pg-head"><h2 id="pgTitle">لوحة التحكم</h2><div class="pg-sub" id="pgSub">الأساس: التكلفة الواجبة من أقرب مركز</div></div>
       </div>
-      <div style="display:flex;gap:8px">
+      <div class="tb-end">
+        <span class="ver-pill" id="verPill" title="رقم إصدار النظام">—</span>
         <button class="btn up" id="uploadBtn">📤 رفع فواتير شهر</button>
         <button class="btn ghost" id="expBtn">⤓ تصدير</button>
       </div>

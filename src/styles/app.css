@@ -5,13 +5,23 @@
   --wash:#eaf6fc;--wash-2:#d6ecf9;
   --ok:#12996e;--ok-bg:#e1f6ee;--warn:#e08a1e;--warn-bg:#fcf0d7;
   --crit:#db2f44;--crit-bg:#fce1e4;--low:#3a8dc4;--low-bg:#e7f2fb;--violet:#7a4fc0;--violet-bg:#f0e9fb;
-  --disp:"Readex Pro","Tajawal",sans-serif;--body:"Tajawal","Segoe UI",sans-serif;
+  --disp:"Readex Pro","Tajawal","Segoe UI",system-ui,sans-serif;--body:"Tajawal","Segoe UI",system-ui,-apple-system,sans-serif;
   --r:14px;--r-lg:20px;--sbw:252px;
   --sh-sm:0 1px 2px rgba(10,42,61,.05),0 2px 8px rgba(10,42,61,.05);
   --sh:0 6px 24px rgba(10,42,61,.08);--sh-lg:0 24px 64px rgba(10,42,61,.2);
 }
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--body);-webkit-font-smoothing:antialiased}
+html{-webkit-text-size-adjust:100%}
+html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--body);line-height:1.55;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-feature-settings:"kern" 1;-webkit-tap-highlight-color:transparent}
+h1,h2,h3,h4,h5{line-height:1.3;text-wrap:balance}
+button{font-family:inherit}
+::selection{background:rgba(27,149,211,.22)}
+/* شريط تمرير أنيق */
+*{scrollbar-width:thin;scrollbar-color:#c2d4e2 transparent}
+::-webkit-scrollbar{width:10px;height:10px}
+::-webkit-scrollbar-thumb{background:#c2d4e2;border-radius:20px;border:2px solid transparent;background-clip:padding-box}
+::-webkit-scrollbar-thumb:hover{background:#a7c0d4;background-clip:padding-box}
+:focus-visible{outline:2px solid var(--brand);outline-offset:2px;border-radius:6px}
 .ltr{unicode-bidi:isolate;direction:ltr;display:inline-block;font-variant-numeric:tabular-nums}
 .hint{font-size:12.5px;color:var(--muted);margin:-2px 0 12px}
 .sub2{color:var(--muted);font-size:10.5px}
@@ -38,9 +48,19 @@ html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--bo
 .sb-foot button:hover{background:rgba(219,47,68,.8);border-color:transparent}
 /* main */
 .main{flex:1;margin-right:var(--sbw);min-width:0}
-.topbar{background:rgba(255,255,255,.82);backdrop-filter:blur(10px);border-bottom:1px solid var(--line);padding:14px 28px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:50}
-.topbar h2{font-family:var(--disp);font-size:18px;font-weight:700;color:var(--navy)}
-.topbar .pg-sub{font-size:11.5px;color:var(--muted);margin-top:1px}
+.topbar{background:rgba(255,255,255,.85);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border-bottom:1px solid var(--line);padding:12px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;position:sticky;top:0;z-index:50}
+.tb-start{display:flex;align-items:center;gap:12px;min-width:0}
+.tb-end{display:flex;align-items:center;gap:9px;flex:none}
+.pg-head{display:flex;flex-direction:column;justify-content:center;gap:3px;min-width:0}
+.topbar h2{font-family:var(--disp);font-size:18px;font-weight:700;color:var(--navy);line-height:1.25;margin:0;letter-spacing:-.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.topbar .pg-sub{font-size:11.5px;color:var(--ink-2);line-height:1.35;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* شارة رقم الإصدار */
+.ver-pill{display:inline-flex;align-items:center;gap:5px;font-family:var(--disp);font-size:11px;font-weight:700;color:var(--brand-d);background:var(--wash);border:1px solid var(--line-2);border-radius:20px;padding:5px 11px;letter-spacing:.3px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ver-pill::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--ok);box-shadow:0 0 0 3px rgba(18,153,110,.18)}
+@media(max-width:1080px){.ver-pill{display:none}}
+.sb-ver{color:rgba(255,255,255,.62);font-family:var(--disp);font-size:11px;font-weight:600;margin-top:7px;letter-spacing:.3px;font-variant-numeric:tabular-nums}
+.sbf-label{font-size:11px;color:rgba(255,255,255,.5)}
+.lf-ver{color:var(--brand-d);font-weight:700;font-family:var(--disp)}
 .hamb{display:none;background:var(--wash);border:none;color:var(--brand-d);width:38px;height:38px;border-radius:10px;font-size:17px;cursor:pointer}
 .content{padding:22px 28px 48px;max-width:1500px}
 /* kpis */
@@ -345,3 +365,97 @@ img,svg,canvas{max-width:100%}
 #infoPop .ip-body{padding:16px 18px;font-size:13px;line-height:1.9;color:var(--ink-2)}
 #infoBd{position:fixed;inset:0;background:rgba(6,32,46,.4);z-index:9490;opacity:0;pointer-events:none;transition:.2s;backdrop-filter:blur(2px)}
 #infoBd.show{opacity:1;pointer-events:auto}
+
+/* ============================================================
+   تلميع الواجهة: تفاعلات احترافية وأيقونات أوضح
+   ============================================================ */
+.nav-item{transition:background .17s,color .17s,transform .12s}
+.nav-item:active{transform:translateX(-2px) scale(.99)}
+.nav-item .ico{font-size:15px;line-height:1;transition:background .17s,transform .17s;filter:saturate(1.05)}
+.nav-item:hover .ico{transform:scale(1.08)}
+.nav-item.active{box-shadow:0 6px 18px rgba(6,32,46,.18)}
+.badge{transition:transform .17s}
+.nav-item:hover .badge{transform:scale(1.06)}
+.btn{position:relative;box-shadow:0 2px 6px rgba(15,111,163,.16);transition:background .15s,box-shadow .15s,transform .12s}
+.btn:hover{box-shadow:0 6px 16px rgba(15,111,163,.26)}
+.btn:active{transform:translateY(1px)}
+.btn.ghost{box-shadow:var(--sh-sm)}
+.btn.up{box-shadow:0 2px 6px rgba(18,153,110,.2)}
+.btn.up:hover{box-shadow:0 6px 16px rgba(18,153,110,.3)}
+.kpi,.ae-card,.lc,.card{transition:transform .18s,box-shadow .18s,border-color .18s}
+.kpi:hover,.ae-card:hover{transform:translateY(-2px);box-shadow:var(--sh)}
+.card:hover{box-shadow:var(--sh)}
+.hamb{transition:background .15s,transform .12s}.hamb:active{transform:scale(.94)}
+.donut circle{transition:stroke-width .2s}
+.barrow .fill,.cause-fill{box-shadow:inset 0 -1px 3px rgba(0,0,0,.12)}
+.atab{transition:all .18s}
+.atab:active{transform:translateY(1px)}
+.tbl-wrap{scrollbar-width:thin}
+table.t tbody tr,table.dt tbody tr,table.mt tbody tr{transition:background .12s}
+.map-res{transition:border-color .13s,background .13s,box-shadow .13s,transform .12s}
+.map-res:active{transform:scale(.99)}
+img{image-rendering:auto}
+.sb-brand img,.login-box img,.login-brandline img{image-rendering:-webkit-optimize-contrast}
+
+/* ============================================================
+   خطة العمل حسب الفترات (صفحة مستقلة)
+   ============================================================ */
+.plan-hero{background:linear-gradient(125deg,#0A2A3D,#0c5f8c,#1B95D3);border-radius:var(--r-lg);padding:26px 30px;color:#fff;position:relative;overflow:hidden;box-shadow:var(--sh-lg);margin-bottom:20px}
+.plan-hero::before{content:"";position:absolute;inset:0;opacity:.4;background:repeating-linear-gradient(115deg,transparent 0 38px,rgba(255,255,255,.03) 38px 39px)}
+.plan-hero .ph-in{position:relative;display:flex;justify-content:space-between;align-items:flex-end;gap:20px;flex-wrap:wrap}
+.plan-hero .ph-eyebrow{font-size:11px;opacity:.85;font-weight:600;letter-spacing:.9px;display:flex;align-items:center;gap:8px}
+.plan-hero .ph-badge{background:rgba(255,255,255,.16);border:1px solid rgba(255,255,255,.2);padding:2px 9px;border-radius:20px;font-family:var(--disp);font-size:10.5px;letter-spacing:.3px}
+.plan-hero h2{font-family:var(--disp);font-size:24px;font-weight:700;margin-top:8px;line-height:1.3;letter-spacing:-.3px}
+.plan-hero .ph-sub{font-size:12.5px;opacity:.85;margin-top:6px;line-height:1.7;max-width:640px}
+.plan-hero .ph-kpis{display:flex;gap:26px;flex-wrap:wrap}
+.plan-hero .ph-k .v{font-family:var(--disp);font-size:26px;font-weight:700;letter-spacing:-1px;line-height:1.05}
+.plan-hero .ph-k .v.warn{color:#ffd97a}.plan-hero .ph-k .v.good{color:#9ff0d2}
+.plan-hero .ph-k .l{font-size:11px;opacity:.82;margin-top:3px}
+/* الخط الزمني */
+.timeline{position:relative;margin:6px 4px 8px;padding-inline-start:0}
+.phase{position:relative;padding:0 34px 22px 0;border-inline-start:2px solid var(--line-2);margin-inline-start:16px}
+.phase:last-child{border-inline-start-color:transparent;padding-bottom:2px}
+.phase::before{content:"";position:absolute;inset-inline-start:-9px;top:2px;width:16px;height:16px;border-radius:50%;background:#fff;border:3px solid var(--brand);box-shadow:0 0 0 4px var(--wash)}
+.phase.done::before{border-color:var(--ok);background:var(--ok)}
+.phase.now::before{border-color:var(--warn);background:var(--warn);animation:pulse 1.8s infinite}
+@keyframes pulse{0%,100%{box-shadow:0 0 0 4px rgba(224,138,30,.18)}50%{box-shadow:0 0 0 8px rgba(224,138,30,.05)}}
+.phase-card{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);box-shadow:var(--sh-sm);padding:18px 20px;transition:box-shadow .18s,transform .18s}
+.phase-card:hover{box-shadow:var(--sh);transform:translateY(-2px)}
+.phase-hd{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap}
+.phase-ttl{font-family:var(--disp);font-size:15.5px;font-weight:700;color:var(--navy);display:flex;align-items:center;gap:9px}
+.phase-ttl .pico{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;font-size:16px;background:var(--wash);flex:none}
+.phase-when{font-family:var(--disp);font-size:11px;font-weight:700;color:var(--brand-d);background:var(--wash);border:1px solid var(--line-2);border-radius:20px;padding:4px 11px;white-space:nowrap}
+.phase-when.w-now{color:#7a5a12;background:var(--warn-bg);border-color:#f1d79a}
+.phase-when.w-done{color:#0c6b4e;background:var(--ok-bg);border-color:#b7e6d4}
+.phase-impact{margin:12px 0 4px;display:inline-flex;align-items:baseline;gap:7px;background:linear-gradient(180deg,#f3fbf7,#e7f8f1);border:1px solid #b7e6d4;border-radius:11px;padding:8px 14px}
+.phase-impact .pi-v{font-family:var(--disp);font-size:19px;font-weight:700;color:#0e7d5b;font-variant-numeric:tabular-nums}
+.phase-impact .pi-l{font-size:11px;color:#0c6b4e}
+.phase-goal{font-size:12.5px;color:var(--ink-2);line-height:1.75;margin:10px 0 12px}
+.task-list{list-style:none;display:flex;flex-direction:column;gap:8px;margin:0}
+.task-list li{display:flex;gap:11px;align-items:flex-start;font-size:12.5px;color:var(--ink);line-height:1.7}
+.task-list li .tk{width:20px;height:20px;border-radius:6px;flex:none;display:grid;place-items:center;font-size:11px;font-weight:700;margin-top:1px}
+.tk.t-do{background:var(--wash);color:var(--brand-d);border:1px solid var(--line-2)}
+.tk.t-key{background:var(--crit-bg);color:var(--crit)}
+.tk.t-ok{background:var(--ok-bg);color:var(--ok)}
+.task-list li .tk-amt{margin-inline-start:auto;font-family:var(--disp);font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums;white-space:nowrap;padding-inline-start:10px}
+.task-list li b{font-weight:700}
+/* لوحة التحليل الشامل */
+.analysis-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+@media(max-width:880px){.analysis-grid{grid-template-columns:1fr}}
+.pareto-note{background:linear-gradient(180deg,#fbfdfe,#fff);border:1px solid var(--line);border-inline-start:3px solid var(--brand);border-radius:12px;padding:14px 16px;font-size:12.5px;color:var(--ink-2);line-height:1.85;margin-top:6px}
+.pareto-note b{color:var(--navy);font-family:var(--disp)}
+.mini-legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--muted);margin-top:10px}
+.mini-legend span{display:inline-flex;align-items:center;gap:5px}
+.mini-legend i{width:10px;height:10px;border-radius:3px}
+.wf-row{display:flex;align-items:center;gap:12px;margin-bottom:9px;font-size:12.5px}
+.wf-row .wf-nm{width:150px;flex:none;color:var(--ink-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wf-row .wf-track{flex:1;height:20px;background:var(--wash);border-radius:7px;overflow:hidden;display:flex;justify-content:flex-end}
+.wf-row .wf-fill{height:100%;border-radius:7px;min-width:3px}
+.wf-row .wf-v{width:96px;flex:none;text-align:left;font-family:var(--disp);font-weight:700;color:var(--navy);font-variant-numeric:tabular-nums}
+@media(max-width:768px){
+  .plan-hero{padding:20px 18px}
+  .plan-hero h2{font-size:20px}
+  .plan-hero .ph-in{flex-direction:column;align-items:flex-start;gap:16px}
+  .phase{padding-inline-end:20px}
+  .wf-row .wf-nm{width:100px}
+}
