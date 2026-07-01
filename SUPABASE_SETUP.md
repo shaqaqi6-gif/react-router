@@ -25,34 +25,32 @@
    where email='YOUR_ADMIN_EMAIL@aldrees.sa';
    ```
 
-## 4) ربط المفاتيح بالتطبيق
-اختر إحدى الطريقتين:
+## 4) ربط المفاتيح (Netlify → Site settings → Environment variables)
+أضف **أربعة** متغيّرات ثم أعد النشر (Redeploy). عندها يتحوّل النظام تلقائياً لوضع الخادم:
 
-**أ) متغيّرات بيئة (المفضّل للنشر على Netlify):**
-في Netlify → Site settings → Environment variables، أضف:
-```
-VITE_SUPABASE_URL       = https://xxxx.supabase.co
-VITE_SUPABASE_ANON_KEY  = <anon public key>
-```
-ثم أعد النشر (Redeploy). سيلتقطها البناء تلقائياً ويتحوّل النظام لوضع الخادم.
+| المتغيّر | القيمة | لأجل |
+|---|---|---|
+| `VITE_SUPABASE_URL` | `https://xxxx.supabase.co` | الواجهة (تفعيل مزوّد Supabase) |
+| `VITE_SUPABASE_ANON_KEY` | `<anon public key>` | الواجهة |
+| `SUPABASE_URL` | `https://xxxx.supabase.co` | دالة الخادم (إنشاء المستخدمين) |
+| `SUPABASE_SERVICE_ROLE_KEY` | `<service_role key>` | دالة الخادم (سرّي) |
 
-**ب) ملف محلّي للتجربة:** أنشئ `.env` في جذر المشروع (لا يُرفع إلى Git — مشمول بـ `.gitignore`):
-```
-VITE_SUPABASE_URL=https://xxxx.supabase.co
-VITE_SUPABASE_ANON_KEY=<anon public key>
-```
+> **للتجربة محلياً** (`npm run dev`): أنشئ ملف `.env` في جذر المشروع (مشمول بـ `.gitignore`)
+> وضع فيه أول متغيّرين فقط (`VITE_*`). دالة إنشاء المستخدمين تحتاج بيئة Netlify.
 
 ## 5) إضافة المستخدمين من داخل التطبيق
-لأن إنشاء مستخدم لآخر يتطلّب مفتاح `service_role` السرّي، يُنشأ عبر **دالة Netlify** آمنة
-(تُضاف في المرحلة التالية). حتى ذلك الحين يمكن للمدير إضافة المستخدمين من
-**Supabase → Authentication → Add user**، ثم ضبط المنصب/القسم/الصلاحيات من صفحة
-«إدارة المستخدمين» في التطبيق.
+بعد الربط، يصبح كل شيء داخل التطبيق:
+- من صفحة **«إدارة المستخدمين»** يضيف المدير مستخدماً (بريد + كلمة سر + اسم + منصب + قسم + صلاحية).
+- الإنشاء يمرّ عبر **دالة Netlify آمنة** (`netlify/functions/admin-users.js`) تحمل مفتاح
+  `service_role` وتتحقّق أن المُنادي مدير قبل التنفيذ — المفتاح السرّي لا يصل للمتصفح أبداً.
+- الحضور «متصل الآن» يعمل حياً عبر الأجهزة (Supabase Realtime Presence)، وأوقات الدخول/الخروج
+  تُسجَّل في جدول `activity`.
 
 ---
 
 ### ملاحظة أمنية
 - `anon key` عام وآمن في الواجهة — الحماية الفعلية عبر سياسات RLS في قاعدة البيانات.
-- `service_role key` سرّي تماماً — يوضع فقط كمتغيّر بيئة في الخادم (Netlify Functions)، ولا يُرفع إلى Git.
+- `service_role key` سرّي تماماً — كمتغيّر بيئة في الخادم فقط (Netlify Functions)، لا يُرفع إلى Git ولا يصل للواجهة.
 
 بعد إتمام الخطوات 1–4، أرسل لي **Project URL** و**anon key** (كلاهما عام وآمن)
-لأكمل ربط مزوّد Supabase في الكود وأتحقّق من عمله فعلياً.
+لأتحقّق من عمل النظام فعلياً (تسجيل دخول، حضور، سجل دخول/خروج) قبل اعتماده.

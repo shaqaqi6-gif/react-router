@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.3.0';
+const APP_VERSION = '1.4.0';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -1203,6 +1203,7 @@ async function boot() {
   $('#lbtn').onclick = login;
   $('#lu').addEventListener('keydown', e => { if (e.key === 'Enter') $('#lp').focus(); });
   $('#lp').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
+  auth.onChange = () => { if (PAGE === 'users' && $('#uForm') && $('#uForm').hidden) render('users'); };
   if (auth.isAuthed()) { auth.startHeartbeat(); applyPermissions(); $('#loginOv').style.display = 'none'; } else openGate();
   window.addEventListener('beforeunload', () => auth.touchAway());
 
