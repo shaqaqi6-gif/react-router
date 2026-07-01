@@ -430,3 +430,52 @@ img,svg,canvas{max-width:100%}
 .tag-cur{font-size:9.5px;font-weight:700;font-family:var(--disp);color:var(--ok);background:var(--ok-bg);padding:2px 7px;border-radius:20px;margin-right:5px}
 tr.trend-cur{background:var(--ok-bg)!important}
 @media(max-width:720px){.period-sel{max-width:130px;padding:8px 9px;font-size:12px}}
+
+/* ============================================================
+   نظام المستخدمين والصلاحيات
+   ============================================================ */
+/* عناصر الإدارة تظهر للمدير فقط */
+.nav-admin-only{display:none}
+body.is-admin .nav-item.nav-admin-only{display:flex}
+body.is-admin .grp.nav-admin-only{display:block}
+/* تقييد التصدير: إخفاء أزرار التصدير لمن لا يملك الصلاحية */
+body.no-export #expBtn,
+body.no-export #aexp,
+body.no-export #sexp,
+body.no-export #expAudit,
+body.no-export #expLoad,
+body.no-export #bExp,
+body.no-export .trend-exp{display:none!important}
+
+/* بطاقة المستخدم الحالي في الشريط الجانبي */
+.sb-user{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:9px 11px;margin-bottom:12px}
+.sb-user .su-name{color:#fff;font-weight:700;font-size:12.5px;font-family:var(--disp)}
+.sb-user .su-role{color:rgba(255,255,255,.55);font-size:10.5px;margin-top:1px}
+.sb-user:empty{display:none}
+
+/* صفحة إدارة المستخدمين */
+.users-wrap{display:flex;flex-direction:column;gap:0}
+.role-badge{font-size:11px;font-weight:700;font-family:var(--disp);padding:2px 9px;border-radius:20px;background:var(--low-bg);color:var(--low)}
+.role-badge.role-admin{background:var(--violet-bg);color:var(--violet)}
+.perm-badge{font-size:10.5px;font-weight:700;font-family:var(--disp);padding:2px 9px;border-radius:20px;white-space:nowrap}
+.perm-exp{background:var(--ok-bg);color:var(--ok)}
+.perm-view{background:var(--wash-2);color:var(--ink-2)}
+.pres{display:inline-flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600}
+.pres::before{content:"";width:8px;height:8px;border-radius:50%;flex:none}
+.pres-on{color:var(--ok)}.pres-on::before{background:var(--ok);box-shadow:0 0 0 3px var(--ok-bg)}
+.pres-off{color:var(--muted)}.pres-off::before{background:var(--muted)}
+.mode-chip{display:inline-block;font-size:10.5px;padding:2px 9px;border-radius:20px;font-weight:600;margin-right:6px}
+.mode-local{background:var(--warn-bg);color:var(--warn)}
+.mode-live{background:var(--ok-bg);color:var(--ok)}
+/* نموذج إضافة/تعديل مستخدم */
+.u-form h4{font-family:var(--disp);color:var(--navy);font-size:15px;margin-bottom:14px}
+.u-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.u-grid label{display:flex;flex-direction:column;gap:6px;font-size:12px;font-weight:600;color:var(--ink-2)}
+.u-grid input[type=text],.u-grid input[type=email],.u-grid select{font-family:var(--body);font-size:13px;padding:9px 11px;border:1px solid var(--line-2);border-radius:10px;background:var(--surface);color:var(--ink);transition:border-color .15s,box-shadow .15s}
+.u-grid input:focus,.u-grid select:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--wash)}
+.u-grid .u-check{flex-direction:row;align-items:center;gap:8px;font-weight:600;color:var(--ink)}
+.u-grid .u-check input{width:16px;height:16px;accent-color:var(--brand)}
+.uf-hint{font-size:10.5px;color:var(--muted);font-weight:500}
+.u-form-err{color:var(--crit);font-size:12.5px;font-weight:600;margin:12px 0 0;min-height:16px}
+.u-form-actions{display:flex;gap:10px;margin-top:14px}
+@media(max-width:760px){.u-grid{grid-template-columns:1fr}}

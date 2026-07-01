@@ -5,6 +5,7 @@ import * as L from 'leaflet';
 import * as XLSX from 'xlsx';
 import { AldreesAudit } from './engine.js';
 import { initialAGG, initialStations, GEO, CENTERS, RM, REF } from './data.js';
+import auth from './auth.js';
 
 window.L = L;            // حارس waitL() القديم يفحص window.L
 let AGG = initialAGG;    // قابلان لإعادة الإسناد عند رفع فاتورة
@@ -24,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.2.1';
+const APP_VERSION = '1.3.0';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -39,6 +40,7 @@ const META = {
   quality:    { t: 'جودة البيانات',      s: 'محطات ناقصة وتجاوزات سعرية وأخطاء مسافات' },
   audit:      { t: 'مركز التدقيق المحاسبي', s: 'تقرير رسمي · أسباب الهدر · توصيات المعالجة · كشف الشذوذ · المقارنة الشهرية' },
   plan:       { t: 'خطة العمل حسب الفترات', s: 'خطة معالجة مرحلية بأثر مالي محسوب · متابعة الاتجاه عبر الأشهر' },
+  users:      { t: 'إدارة المستخدمين', s: 'إضافة المستخدمين وصلاحياتهم · الحضور الآن · أوقات الدخول والخروج' },
 };
 
 /* ---------- التنقل ---------- */
@@ -63,6 +65,7 @@ function render(pg) {
   else if (pg === 'compliance') c.innerHTML = viewCompliance();
   else if (pg === 'quality')  { c.innerHTML = viewQuality();  wireQuality(); }
   else if (pg === 'audit')    { c.innerHTML = viewAudit();    wireAudit(); }
+  else if (pg === 'users')    { c.innerHTML = viewUsers();    wireUsers(); }
   // انتقال ظهور لطيف عند كل تنقّل
   c.classList.remove('page-in'); void c.offsetWidth; c.classList.add('page-in');
 }
@@ -710,6 +713,125 @@ function wirePlan() {
   $$('.plan-wrap .rowlink').forEach(r => r.onclick = () => openModal(+r.dataset.sno));
 }
 
+/* ============================================================
+   إدارة المستخدمين — للمدير فقط
+   ============================================================ */
+let _editUid = null;   // معرّف المستخدم الجاري تعديله (null = إضافة جديد)
+function fmtDT(iso) {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    const t = d.toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' });
+    const dt = d.toLocaleDateString('en-GB');
+    return `<span class="ltr">${dt} · ${t}</span>`;
+  } catch (e) { return '—'; }
+}
+function viewUsers() {
+  if (!auth.isAdmin()) return `<div class="card"><div class="plan-empty">هذه الصفحة للمدير فقط.</div></div>`;
+  const users = auth.listUsers();
+  const online = users.filter(u => auth.isOnline(u)).length;
+  const roleAr = r => r === 'admin' ? 'مدير' : 'مستخدم';
+  const permAr = u => (u.role === 'admin' || u.canExport) ? '<span class="perm-badge perm-exp">عرض + تصدير</span>' : '<span class="perm-badge perm-view">عرض فقط</span>';
+  const modeNote = auth.mode === 'local'
+    ? '<span class="mode-chip mode-local">وضع محلّي — الحضور على هذا المتصفح فقط. لتفعيل الحضور الحقيقي عبر الأجهزة اربط Supabase.</span>'
+    : '<span class="mode-chip mode-live">متصل بالخادم — حضور حيّ عبر الأجهزة.</span>';
+
+  const rows = users.map(u => {
+    const on = auth.isOnline(u);
+    return `<tr>
+      <td class="txt"><b>${u.name || '—'}</b><div class="sub2">${u.email}</div></td>
+      <td class="txt">${u.position || '—'}<div class="sub2">${u.department || ''}</div></td>
+      <td class="txt"><span class="role-badge ${u.role === 'admin' ? 'role-admin' : ''}">${roleAr(u.role)}</span></td>
+      <td class="txt">${permAr(u)}</td>
+      <td class="txt"><span class="pres ${on ? 'pres-on' : 'pres-off'}">${on ? 'متصل الآن' : 'غير متصل'}</span>${u.active ? '' : ' <span class="perm-badge" style="background:var(--crit-bg);color:var(--crit)">موقوف</span>'}</td>
+      <td class="n">${fmtDT(u.lastLogin)}</td>
+      <td class="n">${fmtDT(u.lastLogout)}</td>
+      <td class="n"><span style="display:inline-flex;gap:5px;justify-content:flex-end">
+        <button class="btn ghost sm u-edit" data-id="${u.id}">تعديل</button>
+        <button class="btn ghost sm u-del" data-id="${u.id}" title="حذف">🗑</button>
+      </span></td>
+    </tr>`;
+  }).join('');
+
+  const form = `<div class="card u-form" id="uForm" hidden>
+    <h4 id="uFormTitle">إضافة مستخدم جديد</h4>
+    <div class="u-grid">
+      <label>الاسم<input id="uf_name" type="text" placeholder="الاسم الكامل"></label>
+      <label>البريد الإلكتروني<input id="uf_email" type="email" placeholder="user@aldrees.sa" dir="ltr"></label>
+      <label>كلمة المرور<input id="uf_pw" type="text" placeholder="٦ أحرف على الأقل" dir="ltr"><span class="uf-hint" id="uf_pwHint"></span></label>
+      <label>المنصب<input id="uf_pos" type="text" placeholder="مثل: محلّل تدقيق"></label>
+      <label>القسم<input id="uf_dep" type="text" placeholder="مثل: المالية"></label>
+      <label>الدور<select id="uf_role"><option value="user">مستخدم</option><option value="admin">مدير (كل الصلاحيات)</option></select></label>
+      <label class="u-check"><input id="uf_exp" type="checkbox"> يقدر يصدّر الملفات والتقارير</label>
+      <label class="u-check"><input id="uf_act" type="checkbox" checked> الحساب مُفعّل</label>
+    </div>
+    <div class="u-form-err" id="uf_err"></div>
+    <div class="u-form-actions">
+      <button class="btn up" id="uf_save">حفظ</button>
+      <button class="btn ghost" id="uf_cancel">إلغاء</button>
+    </div>
+  </div>`;
+
+  return `<div class="users-wrap">
+    <div class="card"><div class="card-hd">
+      <div><h3 style="font-family:var(--disp);color:var(--navy);font-size:16px">المستخدمون (${users.length})</h3>
+      <p class="hint" style="margin:4px 0 0">${online} متصل الآن · ${modeNote}</p></div>
+      <button class="btn up" id="uAdd">➕ إضافة مستخدم</button>
+    </div></div>
+    ${form}
+    <div class="card"><div class="tbl-wrap"><table class="dt"><thead><tr>
+      <th class="txt">المستخدم</th><th class="txt">المنصب / القسم</th><th class="txt">الدور</th><th class="txt">الصلاحية</th><th class="txt">الحالة</th><th class="n">آخر دخول</th><th class="n">آخر خروج</th><th class="n">إجراءات</th>
+    </tr></thead><tbody>${rows}</tbody></table></div></div>
+  </div>`;
+}
+function openUserForm(u) {
+  _editUid = u ? u.id : null;
+  $('#uFormTitle').textContent = u ? 'تعديل مستخدم' : 'إضافة مستخدم جديد';
+  $('#uf_name').value = u ? (u.name || '') : '';
+  $('#uf_email').value = u ? u.email : '';
+  $('#uf_pw').value = '';
+  $('#uf_pwHint').textContent = u ? '(اتركها فارغة للإبقاء على الحالية)' : '';
+  $('#uf_pos').value = u ? (u.position || '') : '';
+  $('#uf_dep').value = u ? (u.department || '') : '';
+  $('#uf_role').value = u ? u.role : 'user';
+  $('#uf_exp').checked = u ? !!u.canExport : false;
+  $('#uf_act').checked = u ? u.active !== false : true;
+  $('#uf_err').textContent = '';
+  $('#uForm').hidden = false;
+  $('#uForm').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+function wireUsers() {
+  if (!auth.isAdmin()) return;
+  const add = $('#uAdd'); if (add) add.onclick = () => openUserForm(null);
+  $$('.u-edit').forEach(b => b.onclick = () => { const u = auth.listUsers().find(x => x.id === b.dataset.id); if (u) openUserForm(u); });
+  $$('.u-del').forEach(b => b.onclick = async () => {
+    const u = auth.listUsers().find(x => x.id === b.dataset.id); if (!u) return;
+    if (!confirm(`حذف المستخدم «${u.name || u.email}» نهائياً؟`)) return;
+    const r = await auth.deleteUser(b.dataset.id);
+    if (!r.ok) return alert(r.error);
+    render('users');
+  });
+  const cancel = $('#uf_cancel'); if (cancel) cancel.onclick = () => { $('#uForm').hidden = true; _editUid = null; };
+  const save = $('#uf_save'); if (save) save.onclick = async () => {
+    const data = {
+      name: $('#uf_name').value, email: $('#uf_email').value, password: $('#uf_pw').value,
+      position: $('#uf_pos').value, department: $('#uf_dep').value,
+      role: $('#uf_role').value, canExport: $('#uf_exp').checked, active: $('#uf_act').checked,
+    };
+    let r;
+    if (_editUid) {
+      const patch = { name: data.name, email: data.email, position: data.position, department: data.department, role: data.role, canExport: data.canExport, active: data.active };
+      if (data.password) patch.password = data.password;
+      r = await auth.updateUser(_editUid, patch);
+    } else {
+      r = await auth.createUser(data);
+    }
+    if (!r.ok) { $('#uf_err').textContent = '✕ ' + r.error; return; }
+    _editUid = null;
+    render('users');
+  };
+}
+
 function viewAudit() {
   const A = auditAnalyze();
   const sav = (n) => `<b style="color:var(--ok)">${sar(n)}</b>`;
@@ -1055,28 +1177,37 @@ async function handleUpload(file) {
 /* ============================================================
    التشغيل
    ============================================================ */
-function boot() {
-  // البوابة
-  const UH = 'a9babff89d5eae2861fe95f0e29ab8f08e49ffa65d559ffc43012762f79bdd14';
-  const PH = '27b8abadb34ee9aed5eaef30b8b944c616a5a0e11f7fdba8d82b3fc402e3d7c9';
-  async function sha(t) { const b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join(''); }
+async function boot() {
+  await auth.init();   // تهيئة نظام المستخدمين (يُنشئ المدير الافتراضي أول مرة)
+  // البوابة عبر نظام المستخدمين
+  const box = () => $('.login-box');
   function closeGate() { const ov = $('#loginOv'); ov.style.transition = 'opacity .6s,transform .6s'; ov.style.opacity = '0'; ov.style.transform = 'scale(1.05)'; setTimeout(() => { ov.style.display = 'none'; }, 600); }
+  function openGate() { const ov = $('#loginOv'); ov.style.display = 'flex'; ov.style.opacity = '1'; ov.style.transform = 'none'; }
+  function applyPermissions() {
+    const u = auth.currentUser();
+    document.body.classList.toggle('is-admin', auth.isAdmin());
+    document.body.classList.toggle('no-export', !auth.canExport());
+    const chip = $('#sbUser');
+    if (chip) chip.innerHTML = u ? `<div class="su-name">${u.name || u.email}</div><div class="su-role">${u.position || 'مستخدم'}${u.role === 'admin' ? ' · مدير' : ''}</div>` : '';
+    if (PAGE === 'users' && !auth.isAdmin()) nav('overview');
+  }
   async function login() {
-    const u = $('#lu').value.trim(), p = $('#lp').value, btn = $('#lbtn'), box = $('.login-box');
-    if (!u || !p) { $('#lerr').textContent = 'أدخل اسم المستخدم وكلمة المرور'; return; }
+    const u = $('#lu').value.trim(), p = $('#lp').value, btn = $('#lbtn');
+    if (!u || !p) { $('#lerr').textContent = 'أدخل البريد الإلكتروني وكلمة المرور'; return; }
     btn.classList.add('loading'); $('#lerr').textContent = '';
-    const ok = (await sha(u)) === UH && (await sha(p)) === PH;
+    const r = await auth.signIn(u, p);
     btn.classList.remove('loading');
-    if (ok) { sessionStorage.setItem('aldrees_auth', '1'); box.classList.add('login-ok'); setTimeout(closeGate, 250); }
-    else { $('#lerr').textContent = '✕ بيانات الدخول غير صحيحة'; box.classList.remove('shake'); void box.offsetWidth; box.classList.add('shake'); }
+    if (r.ok) { applyPermissions(); box().classList.add('login-ok'); setTimeout(closeGate, 250); if (PAGE) nav(PAGE); }
+    else { $('#lerr').textContent = '✕ ' + r.error; box().classList.remove('shake'); void box().offsetWidth; box().classList.add('shake'); }
   }
   $('#lbtn').onclick = login;
   $('#lu').addEventListener('keydown', e => { if (e.key === 'Enter') $('#lp').focus(); });
   $('#lp').addEventListener('keydown', e => { if (e.key === 'Enter') login(); });
-  if (sessionStorage.getItem('aldrees_auth') === '1') $('#loginOv').style.display = 'none';
+  if (auth.isAuthed()) { auth.startHeartbeat(); applyPermissions(); $('#loginOv').style.display = 'none'; } else openGate();
+  window.addEventListener('beforeunload', () => auth.touchAway());
 
   // شريط جانبي + رأس
-  $('#logout').onclick = () => { sessionStorage.removeItem('aldrees_auth'); $('#loginOv').style.display = 'flex'; };
+  $('#logout').onclick = () => { auth.signOut(); applyPermissions(); openGate(); };
   { const av = $('#appVer'); if (av) av.textContent = APP_VERSION; }
   $('#sbPeriod').textContent = AGG.period;
   $('#nbAlerts').textContent = num((AGG.tiers['عالي'] || 0) + (AGG.tiers['متوسط'] || 0));
