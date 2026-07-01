@@ -24,7 +24,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.2.0';
+const APP_VERSION = '1.2.1';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -605,6 +605,18 @@ function exportPeriod(period) {
   a.href = URL.createObjectURL(new Blob([csvTxt], { type: 'text/csv;charset=utf-8' }));
   a.download = `تقرير_${period}.csv`; a.click();
 }
+// حذف فترة من المقارنة والمخزن (لإزالة الصفوف المكرّرة/القديمة)
+function deletePeriod(period) {
+  if (!confirm(`حذف «${period}» نهائياً من المقارنة والفواتير المحفوظة؟`)) return;
+  let hist = [];
+  try { hist = JSON.parse(localStorage.getItem('aldrees_hist') || '[]'); } catch (e) {}
+  hist = hist.filter(h => h.period !== period);
+  try { localStorage.setItem('aldrees_hist', JSON.stringify(hist)); } catch (e) {}
+  delete PERIODS[period];
+  persistPeriods();
+  refreshPeriodSel();
+  if (PAGE === 'audit') { const c = $('#content'); c.innerHTML = viewAudit(); wireAudit(); const tb = $('.atab[data-at="trend"]'); if (tb) tb.click(); }
+}
 
 /* ============================================================
    خطة العمل حسب الفترات — صفحة مستقلة
@@ -810,7 +822,7 @@ function viewAudit() {
     <div class="card"><h3>المقارنة الشهرية</h3>
     <p class="hint" style="margin:6px 0 16px">يُحفظ ملخّص كل شهر تلقائياً عند رفعه، فتُبنى مقارنة الاتجاه عبر الأشهر (محفوظة في هذا المتصفح). اضغط زر التصدير في أي صف لتنزيل تقرير محطات تلك الفترة، أو «عرض» لجعلها الفترة النشطة.</p>
     ${hist.length ? `<div class="tbl-wrap"><table class="dt"><thead><tr><th class="txt">الفترة</th><th class="n">الردود</th><th class="n">الفعلي</th><th class="n">الواجب</th><th class="n">الهدر</th><th class="n">% الهدر</th><th class="n">الالتزام</th><th class="n">إجراءات</th></tr></thead><tbody>
-      ${hist.slice().reverse().map(h => `<tr${h.period === AGG.period ? ' class="trend-cur"' : ''}><td class="txt"><b>${h.period}</b>${h.period === AGG.period ? ' <span class="tag-cur">نشطة</span>' : ''}</td><td class="n">${num(h.total)}</td><td class="n">${sar(h.actual)}</td><td class="n">${sar(h.should)}</td><td class="n crit-num">${sar(h.waste)}</td><td class="n">${h.wastePct}%</td><td class="n">${h.compliance}%</td><td class="n"><span style="display:inline-flex;gap:5px;justify-content:flex-end">${h.period !== AGG.period ? `<button class="btn ghost sm trend-show" data-period="${h.period}" title="اجعلها الفترة النشطة">عرض</button>` : ''}<button class="btn ghost sm trend-exp" data-period="${h.period}" title="تصدير تقرير هذه الفترة">⤓</button></span></td></tr>`).join('')}
+      ${hist.slice().reverse().map(h => `<tr${h.period === AGG.period ? ' class="trend-cur"' : ''}><td class="txt"><b>${h.period}</b>${h.period === AGG.period ? ' <span class="tag-cur">نشطة</span>' : ''}</td><td class="n">${num(h.total)}</td><td class="n">${sar(h.actual)}</td><td class="n">${sar(h.should)}</td><td class="n crit-num">${sar(h.waste)}</td><td class="n">${h.wastePct}%</td><td class="n">${h.compliance}%</td><td class="n"><span style="display:inline-flex;gap:5px;justify-content:flex-end">${h.period !== AGG.period ? `<button class="btn ghost sm trend-show" data-period="${h.period}" title="اجعلها الفترة النشطة">عرض</button>` : ''}<button class="btn ghost sm trend-exp" data-period="${h.period}" title="تصدير تقرير هذه الفترة">⤓</button>${h.period !== AGG.period ? `<button class="btn ghost sm trend-del" data-period="${h.period}" title="حذف هذه الفترة من المقارنة">🗑</button>` : ''}</span></td></tr>`).join('')}
     </tbody></table></div>
     ${hist.length < 2 ? '<div class="cause-note">📌 شهر واحد محفوظ حتى الآن. ارفع فاتورة شهر آخر (يونيو…) لتظهر مقارنة الاتجاه والفروقات.</div>' : ''}` :
     '<p class="hint">لا سجل بعد — سيُحفظ ملخّص الشهر تلقائياً.</p>'}
@@ -853,6 +865,7 @@ function wireAudit() {
   $$('.audit-center .rowlink').forEach(r => r.onclick = () => openModal(+r.dataset.sno));
   $$('.trend-exp').forEach(b => b.onclick = () => exportPeriod(b.dataset.period));
   $$('.trend-show').forEach(b => b.onclick = () => switchPeriod(b.dataset.period));
+  $$('.trend-del').forEach(b => b.onclick = () => deletePeriod(b.dataset.period));
   const ea = $('#expAudit'); if (ea) ea.onclick = exportAuditReport;
   const el = $('#expLoad'); if (el) el.onclick = exportLoadReport;
 }
