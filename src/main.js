@@ -24,7 +24,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.1.0';
+const APP_VERSION = '1.2.0';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -551,6 +551,62 @@ function auditHistory(save) {
 }
 
 /* ============================================================
+   مخزن الفترات: يحفظ النتيجة الكاملة لكل فاتورة للتبديل بينها وتصديرها
+   ============================================================ */
+const PERIODS = {};   // period -> { AGG, STATIONS, GEO_trips }
+const ARMONTHS = ['يناير', 'فبراير', 'مارس', 'أبريل', 'مايو', 'يونيو', 'يوليو', 'أغسطس', 'سبتمبر', 'أكتوبر', 'نوفمبر', 'ديسمبر'];
+
+// اكتشاف الفترة من اسم الملف: MMYYYY (مثل 052026) أو YYYYMM
+function detectPeriod(filename) {
+  const name = filename || '';
+  let mth, yr, m;
+  if ((m = name.match(/(\d{2})(\d{4})/)) && +m[1] >= 1 && +m[1] <= 12) { mth = +m[1]; yr = +m[2]; }
+  else if ((m = name.match(/(\d{4})(\d{2})/)) && +m[2] >= 1 && +m[2] <= 12) { yr = +m[1]; mth = +m[2]; }
+  return (mth && yr) ? `${ARMONTHS[mth - 1]} ${yr}` : '';
+}
+function snapshotGeoTrips() {
+  const g = {};
+  for (const sno in GEO) if (GEO[sno].trips != null) g[sno] = { trips: GEO[sno].trips, avgKm: GEO[sno].avgKm };
+  return g;
+}
+function loadPeriodsStore() {
+  try { const raw = JSON.parse(localStorage.getItem('aldrees_periods') || '{}'); for (const k in raw) PERIODS[k] = raw[k]; } catch (e) {}
+}
+function persistPeriods() {
+  try { localStorage.setItem('aldrees_periods', JSON.stringify(PERIODS)); return true; } catch (e) { return false; }
+}
+function savePeriod(period, res) {
+  PERIODS[period] = { AGG: res.AGG, STATIONS: res.STATIONS, GEO_trips: res.GEO_trips || {} };
+  const ok = persistPeriods();
+  refreshPeriodSel();
+  return ok;
+}
+function switchPeriod(period) {
+  const p = PERIODS[period]; if (!p) return;
+  for (const sno in GEO) GEO[sno].trips = 0;   // صفّر تراكب الخريطة ثم طبّق فترة الهدف
+  applyAudit({ AGG: p.AGG, STATIONS: p.STATIONS, GEO_trips: p.GEO_trips });
+  refreshPeriodSel();
+}
+function refreshPeriodSel() {
+  const sel = $('#periodSel'); if (!sel) return;
+  const names = Object.keys(PERIODS);
+  if (names.length < 1) { sel.style.display = 'none'; return; }
+  sel.style.display = '';
+  sel.innerHTML = names.map(n => `<option value="${n}"${n === AGG.period ? ' selected' : ''}>${n}</option>`).join('');
+}
+// تصدير تقرير محطات فترة مخزّنة (من المقارنة الشهرية)
+function exportPeriod(period) {
+  const p = PERIODS[period];
+  if (!p || !p.STATIONS) { alert(`تفاصيل «${period}» غير محفوظة في هذا المتصفح — افتحها بتبديل الفترة أولاً، أو أعد رفع فاتورتها.`); return; }
+  const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'الردود', 'الفعلي', 'الواجب', 'الفجوة (هدر)', 'التصنيف', 'المركز الموصى به'];
+  const rows = Object.entries(p.STATIONS).map(([sno, o]) => [sno, `"${o.nm || ''}"`, `"${o.city || ''}"`, o.trips || 0, Math.round(o.actual || 0), Math.round(o.should || 0), Math.round(o.waste || 0), `"${o.tier || ''}"`, `"${o.bench || ''}"`]);
+  const csvTxt = '﻿' + [head.join(','), ...rows.map(r => r.join(','))].join('\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([csvTxt], { type: 'text/csv;charset=utf-8' }));
+  a.download = `تقرير_${period}.csv`; a.click();
+}
+
+/* ============================================================
    خطة العمل حسب الفترات — صفحة مستقلة
    خطة معالجة مرحلية بأثر مالي محسوب + متابعة الاتجاه عبر الأشهر
    ============================================================ */
@@ -752,9 +808,9 @@ function viewAudit() {
   const hist = auditHistory(false);
   const trend = `<div class="apane" data-pane="trend" hidden>
     <div class="card"><h3>المقارنة الشهرية</h3>
-    <p class="hint" style="margin:6px 0 16px">يُحفظ ملخّص كل شهر تلقائياً عند رفعه، فتُبنى مقارنة الاتجاه عبر الأشهر (محفوظة في هذا المتصفح).</p>
-    ${hist.length ? `<div class="tbl-wrap"><table class="dt"><thead><tr><th class="txt">الفترة</th><th class="n">الردود</th><th class="n">الفعلي</th><th class="n">الواجب</th><th class="n">الهدر</th><th class="n">% الهدر</th><th class="n">الالتزام</th></tr></thead><tbody>
-      ${hist.slice().reverse().map(h => `<tr><td class="txt"><b>${h.period}</b></td><td class="n">${num(h.total)}</td><td class="n">${sar(h.actual)}</td><td class="n">${sar(h.should)}</td><td class="n crit-num">${sar(h.waste)}</td><td class="n">${h.wastePct}%</td><td class="n">${h.compliance}%</td></tr>`).join('')}
+    <p class="hint" style="margin:6px 0 16px">يُحفظ ملخّص كل شهر تلقائياً عند رفعه، فتُبنى مقارنة الاتجاه عبر الأشهر (محفوظة في هذا المتصفح). اضغط زر التصدير في أي صف لتنزيل تقرير محطات تلك الفترة، أو «عرض» لجعلها الفترة النشطة.</p>
+    ${hist.length ? `<div class="tbl-wrap"><table class="dt"><thead><tr><th class="txt">الفترة</th><th class="n">الردود</th><th class="n">الفعلي</th><th class="n">الواجب</th><th class="n">الهدر</th><th class="n">% الهدر</th><th class="n">الالتزام</th><th class="n">إجراءات</th></tr></thead><tbody>
+      ${hist.slice().reverse().map(h => `<tr${h.period === AGG.period ? ' class="trend-cur"' : ''}><td class="txt"><b>${h.period}</b>${h.period === AGG.period ? ' <span class="tag-cur">نشطة</span>' : ''}</td><td class="n">${num(h.total)}</td><td class="n">${sar(h.actual)}</td><td class="n">${sar(h.should)}</td><td class="n crit-num">${sar(h.waste)}</td><td class="n">${h.wastePct}%</td><td class="n">${h.compliance}%</td><td class="n"><span style="display:inline-flex;gap:5px;justify-content:flex-end">${h.period !== AGG.period ? `<button class="btn ghost sm trend-show" data-period="${h.period}" title="اجعلها الفترة النشطة">عرض</button>` : ''}<button class="btn ghost sm trend-exp" data-period="${h.period}" title="تصدير تقرير هذه الفترة">⤓</button></span></td></tr>`).join('')}
     </tbody></table></div>
     ${hist.length < 2 ? '<div class="cause-note">📌 شهر واحد محفوظ حتى الآن. ارفع فاتورة شهر آخر (يونيو…) لتظهر مقارنة الاتجاه والفروقات.</div>' : ''}` :
     '<p class="hint">لا سجل بعد — سيُحفظ ملخّص الشهر تلقائياً.</p>'}
@@ -795,6 +851,8 @@ function wireAudit() {
     $$('.apane').forEach(p => p.hidden = p.dataset.pane !== b.dataset.at);
   });
   $$('.audit-center .rowlink').forEach(r => r.onclick = () => openModal(+r.dataset.sno));
+  $$('.trend-exp').forEach(b => b.onclick = () => exportPeriod(b.dataset.period));
+  $$('.trend-show').forEach(b => b.onclick = () => switchPeriod(b.dataset.period));
   const ea = $('#expAudit'); if (ea) ea.onclick = exportAuditReport;
   const el = $('#expLoad'); if (el) el.onclick = exportLoadReport;
 }
@@ -937,6 +995,7 @@ function applyAudit(res) {
     waste: o.waste || 0, maxBands: o.maxBands || 0, tier: o.tier || 'سليم', bench: o.bench || '', benchD: o.benchD,
   }));
   ROUTES = null; buildRoutes();
+  auditHistory(true);   // احفظ ملخّص الفترة فوراً لتظهر في المقارنة الشهرية والخطة
   $('#sbPeriod').textContent = AGG.period;
   $('#nbAlerts').textContent = num((AGG.tiers['عالي'] || 0) + (AGG.tiers['متوسط'] || 0));
   $('#nbQual').textContent = num(AGG.proxy_stations);
@@ -945,23 +1004,35 @@ function applyAudit(res) {
 function showProc(msg) { $('#proc').style.display = 'flex'; $('#procMsg').textContent = msg; }
 function hideProc() { $('#proc').style.display = 'none'; }
 async function handleUpload(file) {
-  let period = prompt('اسم فترة هذا الملف (مثل: يونيو 2026):', '');
+  // اكتشاف الشهر تلقائياً من اسم الملف (مثل PSDAllInvRpt052026 → مايو 2026)
+  const guess = detectPeriod(file && file.name);
+  const label = guess
+    ? `هذه الفاتورة تتبع الشهر المكتشَف تلقائياً:\n\n«${guess}»\n\nاضغط موافق لاعتماده، أو عدّله:`
+    : 'لم أتعرّف على الشهر من اسم الملف.\nاكتب الشهر الذي تتبعه هذه الفاتورة (مثل: مايو 2026):';
+  let period = prompt(label, guess);
   if (period === null) return;            // ألغى
-  period = period.trim() || 'الشهر الجديد';
+  period = period.trim();
+  if (!period) { alert('يجب تحديد الشهر الذي تتبعه الفاتورة.'); return; }
   showProc('جارٍ قراءة الملف…');
   try {
     const buf = await file.arrayBuffer();
+    const bytes = new Uint8Array(buf);
     await new Promise(r => setTimeout(r, 30));
     showProc('جارٍ قراءة جدول الفواتير…');
-    const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+    // قراءة سريعة: ورقة الفواتير فقط بوضع dense (أسرع ~الضعف من قراءة كل الأوراق)
+    let wb;
+    try { wb = XLSX.read(bytes, { type: 'array', sheets: ['PSDAllInvRpt'], dense: true, cellStyles: false, cellNF: false, cellText: false }); } catch (e) { wb = null; }
+    if (!wb || !wb.Sheets['PSDAllInvRpt']) wb = XLSX.read(bytes, { type: 'array', dense: true, cellStyles: false, cellNF: false, cellText: false });
     const rows = parseInvoiceRows(wb);
     if (!rows.length) throw new Error('لم يُقرأ أي صف صالح — تحقق من الملف');
     showProc(`جارٍ تدقيق ${num(rows.length)} ردة بنموذج التكلفة الواجبة…`);
     await new Promise(r => setTimeout(r, 30));
     const res = AldreesAudit.runAudit(rows, REF, period);
     applyAudit(res);
+    const persisted = savePeriod(period, res);   // خزّن الفاتورة الكاملة للتبديل والتصدير
     hideProc();
-    alert(`✓ تم تحليل «${period}»\nالردود: ${num(res.AGG.total)}\nالهدر: ${num(res.AGG.waste)} ر.س (${res.AGG.wastePct}%)`);
+    alert(`✓ تم تحليل «${period}»\nالردود: ${num(res.AGG.total)}\nالهدر: ${num(res.AGG.waste)} ر.س (${res.AGG.wastePct}%)` +
+      (persisted ? '\n\nيمكنك الآن التبديل بين الفواتير من القائمة أعلى الصفحة.' : '\n\n⚠️ حُفظت للجلسة الحالية فقط (ذاكرة المتصفح ممتلئة).'));
   } catch (e) {
     hideProc();
     alert('تعذّر تحليل الملف:\n' + e.message);
@@ -1024,6 +1095,11 @@ function boot() {
   const fi = $('#fileInput');
   $('#uploadBtn').onclick = () => fi.click();
   fi.onchange = e => { if (e.target.files[0]) { handleUpload(e.target.files[0]); e.target.value = ''; } };
+  // مخزن الفترات + مبدّل الفواتير
+  loadPeriodsStore();
+  if (!PERIODS[AGG.period]) PERIODS[AGG.period] = { AGG, STATIONS, GEO_trips: snapshotGeoTrips() };
+  $('#periodSel').onchange = e => switchPeriod(e.target.value);
+  refreshPeriodSel();
 
   // قائمة المحطات الخفيفة للجداول
   window.SLIST = Object.entries(STATIONS).map(([sno, o]) => ({
