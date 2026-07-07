@@ -115,7 +115,9 @@ const _engineExports = {};
         }
       }
       const billedRate = rateOf(P, cap, bb);
-      const orgA = O2A[origin] || origin;
+      let orgA = O2A[origin] || origin;
+      // أصل غير مربوط يشبه مستودع الدمام (NNN - DAM PSD ...) → أرامكو الظهران
+      if (orgA === origin && /DAM\s*PSD|DAMMAM/i.test(origin)) orgA = 'أرامكو الظهران';
 
       // نجران: مُزالة بالكامل — تُسقَط ردودها ولا تُحتسب في أي شيء
       if (NAJRAN.has(sno)) continue;
