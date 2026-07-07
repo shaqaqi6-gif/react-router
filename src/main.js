@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.7.2';
+const APP_VERSION = '1.7.3';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -601,10 +601,10 @@ function refreshPeriodSel() {
 function exportPeriod(period) {
   const p = PERIODS[period];
   if (!p || !p.STATIONS) { alert(`تفاصيل «${period}» غير محفوظة في هذا المتصفح — افتحها بتبديل الفترة أولاً، أو أعد رفع فاتورتها.`); return; }
-  const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'المنطقة', 'الحالة', 'الردود', 'مركز الانطلاق', 'كل مراكز الانطلاق', 'الفعلي', 'الواجب', 'الفجوة (هدر)', 'التصنيف', 'المركز الأقرب الموصى به', 'كم الطريق الموصى'];
+  const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'المنطقة', 'الحالة', 'الردود', 'مركز الانطلاق', 'كل مراكز الانطلاق', 'الفعلي', 'الواجب', 'الفجوة (هدر)', 'التصنيف', 'المركز الأقرب الموصى به', 'كم الطريق الموصى', ...CENTER_COLS];
   const rows = Object.entries(p.STATIONS).map(([sno, o]) => {
     const org = originInfo(o);
-    return [sno, `"${o.nm || ''}"`, `"${o.city || ''}"`, `"${o.reg || ''}"`, `"${covAr(o.cov)}"`, o.trips || 0, `"${org.main}"`, `"${org.all}"`, Math.round(o.actual || 0), Math.round(o.should || 0), Math.round(o.waste || 0), `"${o.tier || ''}"`, `"${o.bench || ''}"`, o.benchD != null ? o.benchD : ''];
+    return [sno, `"${o.nm || ''}"`, `"${o.city || ''}"`, `"${o.reg || ''}"`, `"${covAr(o.cov)}"`, o.trips || 0, `"${org.main}"`, `"${org.all}"`, Math.round(o.actual || 0), Math.round(o.should || 0), Math.round(o.waste || 0), `"${o.tier || ''}"`, `"${o.bench || ''}"`, o.benchD != null ? o.benchD : '', ...centerKms(+sno)];
   });
   exportSheet(head, rows, `تقرير_${period}.xlsx`);
 }
@@ -1017,13 +1017,22 @@ function originInfo(s) {
 }
 function covAr(cov) { return cov === 'benchmark' ? 'مدرجة بالمرجع' : cov === 'proxy' ? 'ناقصة (خارج المرجع)' : (cov || ''); }
 
+// قائمة المراكز الـ21 (كل المراكز عدا نجران) + مسافة الطريق من محطة لكل مركز
+const CENTER_LIST = RM.centers.filter(c => c !== 'أرامكو نجران');
+const CENTER_COLS = CENTER_LIST.map(c => `كم· ${c}`);
+function centerKms(sno) {
+  const map = {};
+  (RM.roads[sno] || []).forEach(([ci, km]) => { map[RM.centers[ci]] = km; });
+  return CENTER_LIST.map(c => map[c] != null ? map[c] : '');
+}
+
 function exportAuditReport() {
   const A = auditAnalyze();
-  const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'المنطقة', 'الحالة', 'عدد الردود', 'مركز الانطلاق', 'كل مراكز الانطلاق', 'الفعلي', 'الواجب', 'الفجوة (هدر)', 'التصنيف', 'المركز الأقرب الموصى به', 'كم الطريق الموصى', 'السبب', 'التوصية'];
+  const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'المنطقة', 'الحالة', 'عدد الردود', 'مركز الانطلاق', 'كل مراكز الانطلاق', 'الفعلي', 'الواجب', 'الفجوة (هدر)', 'التصنيف', 'المركز الأقرب الموصى به', 'كم الطريق الموصى', 'السبب', 'التوصية', ...CENTER_COLS];
   const rows = A.reportRows.map(r => {
     const s = STATIONS[r.sno] || {};
     const o = originInfo(s);
-    return [r.sno, `"${r.nm}"`, `"${r.city || s.city || ''}"`, `"${s.reg || ''}"`, `"${covAr(s.cov)}"`, s.trips || 0, `"${o.main}"`, `"${o.all}"`, r.actual, r.should, r.waste, `"${s.tier || ''}"`, `"${r.bench}"`, r.benchD, `"${r.cause}"`, `"${r.rec}"`];
+    return [r.sno, `"${r.nm}"`, `"${r.city || s.city || ''}"`, `"${s.reg || ''}"`, `"${covAr(s.cov)}"`, s.trips || 0, `"${o.main}"`, `"${o.all}"`, r.actual, r.should, r.waste, `"${s.tier || ''}"`, `"${r.bench}"`, r.benchD, `"${r.cause}"`, `"${r.rec}"`, ...centerKms(r.sno)];
   });
   exportSheet(head, rows, `تقرير_التدقيق_${AGG.period}.xlsx`);
 }
