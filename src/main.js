@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.1';
+const APP_VERSION = '1.9.2';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -957,7 +957,7 @@ function viewAudit() {
   // 7) مقارنة تكلفة النقل (المفوتر مقابل الصحيح)
   const tcost = `<div class="apane" data-pane="tcost" hidden>
     <div class="card"><div class="card-hd"><h3>مقارنة تكلفة النقل — ${AGG.period}</h3><button class="btn ghost sm" id="expTCost">⤓ تصدير Excel</button></div>
-    <p class="hint" style="margin:0 0 12px">لكل محطة: المركز الذي ورّدها فعلاً ومسافته ومبلغه المفوتر، مقابل المركز الصحيح (الأقرب) ومسافته ومبلغه — والفرق المالي. مرتّبة بالأكثر تأثيراً مالياً.</p>
+    <p class="hint" style="margin:0 0 12px">صفٌّ لكل <b>مركز انطلاق</b> ورّد المحطة (المحطة الواحدة قد تُورَّد من أكثر من مركز): كم ومبلغ المفوتر من ذلك المركز، مقابل المركز الصحيح (الأقرب) ومسافته ومبلغه — والفرق المالي. مرتّبة بالأكثر تأثيراً مالياً.</p>
     <div class="tc-searchbar"><span class="tc-sico">🔍</span><input id="tcSearch" type="text" placeholder="ابحث برقم المحطة أو الاسم أو المركز أو المنتج…" autocomplete="off"></div>
     <div class="tbl-wrap"><table class="dt tcost-tbl"><thead><tr>
       <th class="n">م</th><th class="txt">المحطة (DESTINATION)</th><th class="txt">المركز المفوتر (ARAMCO)</th><th class="txt">المنتج</th>
@@ -984,23 +984,28 @@ function renderTCostBody(q) {
   if (note) note.textContent = query ? `${num(rows.length)} نتيجة مطابقة` : (rows.length > 150 ? `عرض أعلى 150 محطة تأثيراً — التصدير يشمل الكل (${num(rows.length)})` : '');
   body.querySelectorAll('.rowlink').forEach(t => t.onclick = () => openModal(+t.dataset.sno));
 }
-// صفوف مقارنة تكلفة النقل: لكل محطة ذات هدر — المفوتر مقابل الصحيح
+// صفوف مقارنة تكلفة النقل: صف لكل (محطة × مركز انطلاق) — كل مركز ورّد المحطة يظهر بأرقامه
 function tcostRows() {
-  return Object.entries(STATIONS)
-    .filter(([, s]) => (s.waste || 0) > 0)
-    .map(([sno, s]) => {
-      const o = originInfo(s);
-      const t = s.trips || 1;
-      return {
-        sno: +sno, nm: s.nm || '', billedCenter: o.main || (s.byO && s.byO[0] ? s.byO[0].orgA : ''),
-        product: (s.byP && s.byP[0]) ? s.byP[0].prod : '',
-        kmTsd: s.avgKmTrip || 0, amtTsd: Math.round(s.actual / t),
+  const out = [];
+  for (const [snoStr, s] of Object.entries(STATIONS)) {
+    if ((s.waste || 0) <= 0) continue;   // محطات ذات هدر فقط
+    const prod = (s.byP && s.byP[0]) ? s.byP[0].prod : '';
+    const byO = (s.byO && s.byO.length) ? s.byO
+      : [{ orgA: originInfo(s).main, trips: s.trips, rate: Math.round(s.actual / (s.trips || 1)), kmTrip: s.avgKmTrip, waste: s.waste }];
+    for (const o of byO) {
+      const t = o.trips || 1;
+      const diff = Math.round((o.waste || 0) / t);        // فرق الردة لهذا المركز
+      out.push({
+        sno: +snoStr, nm: s.nm || '',
+        billedCenter: o.orgA || '', product: prod,
+        kmTsd: o.kmTrip || 0, amtTsd: Math.round(o.rate || 0),
         correct: s.bench || '', kmRoad: s.benchD != null ? s.benchD : '',
-        amtRoad: Math.round(s.should / t),   // الواجب÷الردود ليتسق: مفوتر − طريق = الفرق
-        diff: Math.round(s.waste / t), trips: s.trips || 0, total: s.waste || 0,
-      };
-    })
-    .sort((a, b) => b.total - a.total);
+        amtRoad: Math.max(0, Math.round((o.rate || 0)) - diff),   // المفوتر − الفرق = مبلغ الطريق الصحيح
+        diff, trips: o.trips || 0, total: Math.round(o.waste || 0),
+      });
+    }
+  }
+  return out.sort((a, b) => b.total - a.total);
 }
 function exportTCost() {
   const head = ['SER', '(DESTINATION) المحطة', 'ARAMCO', 'PRODUCT', 'AVG KM (TSD)', 'AVG AMOUNT (TSD)', 'THE CORRECT ARAMCO', 'AVG KM (ROAD)', 'AVG AMOUNT (ROAD)', 'AVG DIFF AMOUNT', 'TRIPS', 'TOTAL AMOUNT DIFF', 'NOTES'];
