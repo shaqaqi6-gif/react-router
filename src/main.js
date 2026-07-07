@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.7.4';
+const APP_VERSION = '1.7.5';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -1017,13 +1017,15 @@ function originInfo(s) {
 }
 function covAr(cov) { return cov === 'benchmark' ? 'مدرجة بالمرجع' : cov === 'proxy' ? 'ناقصة (خارج المرجع)' : (cov || ''); }
 
-// قائمة المراكز الـ21 (كل المراكز عدا نجران) + مسافة الطريق من محطة لكل مركز
-const CENTER_LIST = RM.centers.filter(c => c !== 'أرامكو نجران');
-const CENTER_COLS = CENTER_LIST.map(c => `كم· ${c}`);
+// المراكز الـ21 (عدا نجران) مرتّبة لكل محطة من الأقرب إلى الأبعد — كل خلية «المركز (كم)»
+const CENTER_COLS = Array.from({ length: 21 }, (_, i) => i === 0 ? 'الأقرب' : i === 20 ? 'الأبعد' : `الأقرب ${i + 1}`);
 function centerKms(sno) {
-  const map = {};
-  (RM.roads[sno] || []).forEach(([ci, km]) => { map[RM.centers[ci]] = km; });
-  return CENTER_LIST.map(c => map[c] != null ? map[c] : '');
+  const r = RM.roads[sno];
+  if (!r) return CENTER_COLS.map(() => '');
+  const list = r.map(([ci, km]) => ({ name: RM.centers[ci], km }))
+    .filter(x => x.name !== 'أرامكو نجران')
+    .sort((a, b) => a.km - b.km);
+  return CENTER_COLS.map((_, i) => list[i] ? `${list[i].name} (${list[i].km})` : '');
 }
 
 function exportAuditReport() {
