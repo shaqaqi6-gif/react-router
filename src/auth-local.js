@@ -31,21 +31,30 @@ const auth = {
   // تهيئة: أنشئ مدير النظام الافتراضي عند أول تشغيل
   async init() {
     let users = readUsers();
-    // ترحيل: حسابات قديمة بحقل email → اشتقاق اسم مستخدم منها
     let migrated = false;
+    // ترحيل 1: حسابات قديمة بحقل email → اشتقاق اسم مستخدم منها
     for (const u of users) { if (!u.username && u.email) { u.username = String(u.email).split('@')[0].toLowerCase(); migrated = true; } }
+    // ترحيل 2: ترقية المدير الافتراضي القديم إلى بيانات الدريس (دون المساس بحساب aldrees إن وُجد)
+    const oldDefaults = new Set([await sha256('admin123'), await sha256('Admin@1234')]);
+    if (!users.some(u => u.username === 'aldrees')) {
+      for (const u of users) {
+        if (u.username === 'admin' && u.role === 'admin' && oldDefaults.has(u.pwHash)) {
+          u.username = 'aldrees'; u.pwHash = await sha256('Aldrees@2026'); migrated = true;
+        }
+      }
+    }
     if (migrated) writeUsers(users);
     if (!users.length) {
       const admin = {
-        id: uid(), username: 'admin', name: 'مدير النظام', position: 'مدير النظام',
+        id: uid(), username: 'aldrees', name: 'مدير النظام', position: 'مدير النظام',
         department: 'الإدارة', role: 'admin', canExport: true, active: true,
-        pwHash: await sha256('admin123'), createdAt: nowISO(),
+        pwHash: await sha256('Aldrees@2026'), createdAt: nowISO(),
         lastLogin: null, lastLogout: null, lastSeen: 0,
       };
       users = [admin];
       writeUsers(users);
     }
-    return { seededDefault: users.length === 1 && users[0].username === 'admin' };
+    return { seededDefault: users.length === 1 && users[0].username === 'aldrees' };
   },
 
   currentUser() {
