@@ -18,12 +18,14 @@
 2. الصق كامل محتوى `supabase/schema.sql` واضغط **Run**.
 
 ## 3) إنشاء أول مدير
-1. **Authentication → Users → Add user**: أدخل بريدك وكلمة سر (فعّل Auto-confirm).
-2. عُد إلى **SQL Editor** ونفّذ (استبدل بريدك):
+الدخول بالتطبيق يتم بـ **اسم المستخدم** (يُحوَّل داخلياً إلى بريد `اسم_المستخدم@aldrees.local`).
+1. **Authentication → Users → Add user**: أدخل البريد بصيغة `admin@aldrees.local` وكلمة سر (فعّل Auto-confirm).
+2. عُد إلى **SQL Editor** ونفّذ:
    ```sql
-   update public.profiles set role='admin', can_export=true, is_active=true
-   where email='YOUR_ADMIN_EMAIL@aldrees.sa';
+   update public.profiles set username='admin', role='admin', can_export=true, is_active=true
+   where email='admin@aldrees.local';
    ```
+3. بعدها تدخل التطبيق باسم المستخدم `admin` وكلمة السر التي اخترتها.
 
 ## 4) ربط المفاتيح (Netlify → Site settings → Environment variables)
 أضف **أربعة** متغيّرات ثم أعد النشر (Redeploy). عندها يتحوّل النظام تلقائياً لوضع الخادم:

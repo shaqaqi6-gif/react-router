@@ -31,14 +31,16 @@ export async function handler(event) {
 
   try {
     if (body.action === 'create') {
+      const username = (body.username || '').trim().toLowerCase();
+      const email = (body.email || `${username}@aldrees.local`).trim();
       const { data, error } = await admin.auth.admin.createUser({
-        email: (body.email || '').trim(), password: body.password, email_confirm: true,
-        user_metadata: { full_name: body.name || '', position: body.position || '', department: body.department || '', role: body.role === 'admin' ? 'admin' : 'user', can_export: !!body.canExport },
+        email, password: body.password, email_confirm: true,
+        user_metadata: { username, full_name: body.name || '', position: body.position || '', department: body.department || '', role: body.role === 'admin' ? 'admin' : 'user', can_export: !!body.canExport },
       });
       if (error) return resp(400, { error: error.message });
       // تأكيد حقول الملف الشخصي (المُنشأ عبر المُشغّل trigger)
       await admin.from('profiles').update({
-        full_name: body.name || '', position: body.position || '', department: body.department || '',
+        username, full_name: body.name || '', position: body.position || '', department: body.department || '',
         role: body.role === 'admin' ? 'admin' : 'user', can_export: !!body.canExport, is_active: body.active !== false,
       }).eq('id', data.user.id);
       return resp(200, { ok: true });

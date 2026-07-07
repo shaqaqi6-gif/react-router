@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.6.0';
+const APP_VERSION = '1.7.0';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -742,7 +742,7 @@ function viewUsers() {
   const rows = users.map(u => {
     const on = auth.isOnline(u);
     return `<tr>
-      <td class="txt"><b>${u.name || '—'}</b><div class="sub2">${u.email}</div></td>
+      <td class="txt"><b>${u.name || '—'}</b><div class="sub2">${u.username}</div></td>
       <td class="txt">${u.position || '—'}<div class="sub2">${u.department || ''}</div></td>
       <td class="txt"><span class="role-badge ${u.role === 'admin' ? 'role-admin' : ''}">${roleAr(u.role)}</span></td>
       <td class="txt">${permAr(u)}</td>
@@ -760,7 +760,7 @@ function viewUsers() {
     <h4 id="uFormTitle">إضافة مستخدم جديد</h4>
     <div class="u-grid">
       <label>الاسم<input id="uf_name" type="text" placeholder="الاسم الكامل"></label>
-      <label>البريد الإلكتروني<input id="uf_email" type="email" placeholder="user@aldrees.sa" dir="ltr"></label>
+      <label>اسم المستخدم<input id="uf_username" type="text" placeholder="مثل: saad" dir="ltr" autocomplete="off"></label>
       <label>كلمة المرور<input id="uf_pw" type="text" placeholder="٦ أحرف على الأقل" dir="ltr"><span class="uf-hint" id="uf_pwHint"></span></label>
       <label>المنصب<input id="uf_pos" type="text" placeholder="مثل: محلّل تدقيق"></label>
       <label>القسم<input id="uf_dep" type="text" placeholder="مثل: المالية"></label>
@@ -791,7 +791,7 @@ function openUserForm(u) {
   _editUid = u ? u.id : null;
   $('#uFormTitle').textContent = u ? 'تعديل مستخدم' : 'إضافة مستخدم جديد';
   $('#uf_name').value = u ? (u.name || '') : '';
-  $('#uf_email').value = u ? u.email : '';
+  $('#uf_username').value = u ? u.username : '';
   $('#uf_pw').value = '';
   $('#uf_pwHint').textContent = u ? '(اتركها فارغة للإبقاء على الحالية)' : '';
   $('#uf_pos').value = u ? (u.position || '') : '';
@@ -809,7 +809,7 @@ function wireUsers() {
   $$('.u-edit').forEach(b => b.onclick = () => { const u = auth.listUsers().find(x => x.id === b.dataset.id); if (u) openUserForm(u); });
   $$('.u-del').forEach(b => b.onclick = async () => {
     const u = auth.listUsers().find(x => x.id === b.dataset.id); if (!u) return;
-    if (!confirm(`حذف المستخدم «${u.name || u.email}» نهائياً؟`)) return;
+    if (!confirm(`حذف المستخدم «${u.name || u.username}» نهائياً؟`)) return;
     const r = await auth.deleteUser(b.dataset.id);
     if (!r.ok) return alert(r.error);
     render('users');
@@ -817,13 +817,13 @@ function wireUsers() {
   const cancel = $('#uf_cancel'); if (cancel) cancel.onclick = () => { $('#uForm').hidden = true; _editUid = null; };
   const save = $('#uf_save'); if (save) save.onclick = async () => {
     const data = {
-      name: $('#uf_name').value, email: $('#uf_email').value, password: $('#uf_pw').value,
+      name: $('#uf_name').value, username: $('#uf_username').value, password: $('#uf_pw').value,
       position: $('#uf_pos').value, department: $('#uf_dep').value,
       role: $('#uf_role').value, canExport: $('#uf_exp').checked, active: $('#uf_act').checked,
     };
     let r;
     if (_editUid) {
-      const patch = { name: data.name, email: data.email, position: data.position, department: data.department, role: data.role, canExport: data.canExport, active: data.active };
+      const patch = { name: data.name, username: data.username, position: data.position, department: data.department, role: data.role, canExport: data.canExport, active: data.active };
       if (data.password) patch.password = data.password;
       r = await auth.updateUser(_editUid, patch);
     } else {
@@ -1203,12 +1203,12 @@ async function boot() {
     document.body.classList.toggle('is-admin', auth.isAdmin());
     document.body.classList.toggle('no-export', !auth.canExport());
     const chip = $('#sbUser');
-    if (chip) chip.innerHTML = u ? `<div class="su-name">${u.name || u.email}</div><div class="su-role">${u.position || 'مستخدم'}${u.role === 'admin' ? ' · مدير' : ''}</div>` : '';
+    if (chip) chip.innerHTML = u ? `<div class="su-name">${u.name || u.username}</div><div class="su-role">${u.position || 'مستخدم'}${u.role === 'admin' ? ' · مدير' : ''}</div>` : '';
     if (PAGE === 'users' && !auth.isAdmin()) nav('overview');
   }
   async function login() {
     const u = $('#lu').value.trim(), p = $('#lp').value, btn = $('#lbtn');
-    if (!u || !p) { $('#lerr').textContent = 'أدخل البريد الإلكتروني وكلمة المرور'; return; }
+    if (!u || !p) { $('#lerr').textContent = 'أدخل اسم المستخدم وكلمة المرور'; return; }
     btn.classList.add('loading'); $('#lerr').textContent = '';
     const r = await auth.signIn(u, p);
     btn.classList.remove('loading');

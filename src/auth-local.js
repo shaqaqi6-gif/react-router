@@ -31,17 +31,21 @@ const auth = {
   // تهيئة: أنشئ مدير النظام الافتراضي عند أول تشغيل
   async init() {
     let users = readUsers();
+    // ترحيل: حسابات قديمة بحقل email → اشتقاق اسم مستخدم منها
+    let migrated = false;
+    for (const u of users) { if (!u.username && u.email) { u.username = String(u.email).split('@')[0].toLowerCase(); migrated = true; } }
+    if (migrated) writeUsers(users);
     if (!users.length) {
       const admin = {
-        id: uid(), email: 'admin@aldrees.sa', name: 'مدير النظام', position: 'مدير النظام',
+        id: uid(), username: 'admin', name: 'مدير النظام', position: 'مدير النظام',
         department: 'الإدارة', role: 'admin', canExport: true, active: true,
-        pwHash: await sha256('Admin@1234'), createdAt: nowISO(),
+        pwHash: await sha256('admin123'), createdAt: nowISO(),
         lastLogin: null, lastLogout: null, lastSeen: 0,
       };
       users = [admin];
       writeUsers(users);
     }
-    return { seededDefault: users.length === 1 && users[0].email === 'admin@aldrees.sa' };
+    return { seededDefault: users.length === 1 && users[0].username === 'admin' };
   },
 
   currentUser() {
@@ -53,11 +57,11 @@ const auth = {
   isAdmin() { const u = this.currentUser(); return !!u && u.role === 'admin'; },
   canExport() { const u = this.currentUser(); return !!u && (u.role === 'admin' || u.canExport); },
 
-  async signIn(email, password) {
+  async signIn(username, password) {
     const users = readUsers();
-    const em = (email || '').trim().toLowerCase();
-    const u = users.find(x => (x.email || '').toLowerCase() === em);
-    if (!u) return { ok: false, error: 'المستخدم غير موجود' };
+    const em = (username || '').trim().toLowerCase();
+    const u = users.find(x => (x.username || '').toLowerCase() === em);
+    if (!u) return { ok: false, error: 'اسم المستخدم غير موجود' };
     if (!u.active) return { ok: false, error: 'الحساب موقوف — راجع المدير' };
     if (u.pwHash !== await sha256(password)) return { ok: false, error: 'كلمة المرور غير صحيحة' };
     u.lastLogin = nowISO(); u.lastSeen = Date.now();
@@ -103,12 +107,12 @@ const auth = {
   async createUser(data) {
     if (!this.isAdmin()) return { ok: false, error: 'صلاحية المدير مطلوبة' };
     const users = readUsers();
-    const em = (data.email || '').trim().toLowerCase();
-    if (!em || !/^\S+@\S+\.\S+$/.test(em)) return { ok: false, error: 'أدخل بريداً إلكترونياً صحيحاً' };
+    const em = (data.username || '').trim().toLowerCase();
+    if (!em || em.length < 3 || /\s/.test(em)) return { ok: false, error: 'اسم المستخدم ٣ أحرف على الأقل وبلا مسافات' };
     if (!data.password || data.password.length < 6) return { ok: false, error: 'كلمة المرور ٦ أحرف على الأقل' };
-    if (users.some(u => (u.email || '').toLowerCase() === em)) return { ok: false, error: 'البريد مستخدم مسبقاً' };
+    if (users.some(u => (u.username || '').toLowerCase() === em)) return { ok: false, error: 'اسم المستخدم مستخدم مسبقاً' };
     users.push({
-      id: uid(), email: em, name: (data.name || '').trim(), position: (data.position || '').trim(),
+      id: uid(), username: em, name: (data.name || '').trim(), position: (data.position || '').trim(),
       department: (data.department || '').trim(), role: data.role === 'admin' ? 'admin' : 'user',
       canExport: !!data.canExport, active: data.active !== false, pwHash: await sha256(data.password),
       createdAt: nowISO(), lastLogin: null, lastLogout: null, lastSeen: 0,
@@ -122,11 +126,11 @@ const auth = {
     const users = readUsers();
     const u = users.find(x => x.id === id);
     if (!u) return { ok: false, error: 'المستخدم غير موجود' };
-    if (patch.email != null) {
-      const em = patch.email.trim().toLowerCase();
-      if (!/^\S+@\S+\.\S+$/.test(em)) return { ok: false, error: 'بريد غير صحيح' };
-      if (users.some(x => x.id !== id && (x.email || '').toLowerCase() === em)) return { ok: false, error: 'البريد مستخدم مسبقاً' };
-      u.email = em;
+    if (patch.username != null) {
+      const em = patch.username.trim().toLowerCase();
+      if (em.length < 3 || /\s/.test(em)) return { ok: false, error: 'اسم المستخدم ٣ أحرف على الأقل وبلا مسافات' };
+      if (users.some(x => x.id !== id && (x.username || '').toLowerCase() === em)) return { ok: false, error: 'اسم المستخدم مستخدم مسبقاً' };
+      u.username = em;
     }
     if (patch.name != null) u.name = patch.name.trim();
     if (patch.position != null) u.position = patch.position.trim();

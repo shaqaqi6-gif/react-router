@@ -22,13 +22,16 @@ export function createSupabaseAuth(url, anonKey) {
   let _channel = null;
   let _timer = null;
 
+  // Supabase Auth يتطلّب بريداً؛ نحوّل اسم المستخدم إلى بريد داخلي ثابت.
+  const toEmail = (un) => `${(un || '').trim().toLowerCase()}@aldrees.local`;
+
   async function loadProfile(userId) {
     const { data } = await supa.from('profiles').select('*').eq('id', userId).single();
     return data ? mapProfile(data) : null;
   }
   function mapProfile(p, acts) {
     return {
-      id: p.id, email: p.email, name: p.full_name || '', position: p.position || '',
+      id: p.id, username: p.username || (p.email || '').split('@')[0], name: p.full_name || '', position: p.position || '',
       department: p.department || '', role: p.role || 'user', canExport: !!p.can_export,
       active: p.is_active !== false, lastLogin: acts?.login || null, lastLogout: acts?.logout || null,
     };
@@ -107,9 +110,9 @@ export function createSupabaseAuth(url, anonKey) {
     isAdmin() { return !!_me && _me.role === 'admin'; },
     canExport() { return !!_me && (_me.role === 'admin' || _me.canExport); },
 
-    async signIn(email, password) {
-      const { data, error } = await supa.auth.signInWithPassword({ email: (email || '').trim(), password });
-      if (error) return { ok: false, error: /invalid/i.test(error.message) ? 'البريد أو كلمة المرور غير صحيحة' : error.message };
+    async signIn(username, password) {
+      const { data, error } = await supa.auth.signInWithPassword({ email: toEmail(username), password });
+      if (error) return { ok: false, error: /invalid/i.test(error.message) ? 'اسم المستخدم أو كلمة المرور غير صحيحة' : error.message };
       _me = await loadProfile(data.user.id);
       if (!_me) return { ok: false, error: 'لا يوجد ملف شخصي — راجع المدير' };
       if (!_me.active) { await supa.auth.signOut(); _me = null; return { ok: false, error: 'الحساب موقوف — راجع المدير' }; }
@@ -144,9 +147,10 @@ export function createSupabaseAuth(url, anonKey) {
 
     async createUser(data) {
       if (!this.isAdmin()) return { ok: false, error: 'صلاحية المدير مطلوبة' };
-      if (!/^\S+@\S+\.\S+$/.test((data.email || '').trim())) return { ok: false, error: 'أدخل بريداً صحيحاً' };
+      const un = (data.username || '').trim().toLowerCase();
+      if (un.length < 3 || /\s/.test(un)) return { ok: false, error: 'اسم المستخدم ٣ أحرف على الأقل وبلا مسافات' };
       if (!data.password || data.password.length < 6) return { ok: false, error: 'كلمة المرور ٦ أحرف على الأقل' };
-      const r = await callAdmin({ action: 'create', ...data });
+      const r = await callAdmin({ action: 'create', ...data, username: un, email: toEmail(un) });
       if (r.ok) await refreshUsers();
       return r;
     },
@@ -161,14 +165,19 @@ export function createSupabaseAuth(url, anonKey) {
       if (patch.role != null) prof.role = patch.role === 'admin' ? 'admin' : 'user';
       if (patch.canExport != null) prof.can_export = !!patch.canExport;
       if (patch.active != null) prof.is_active = !!patch.active;
-      if (patch.email != null) prof.email = patch.email.trim();
+      let newEmail = null;
+      if (patch.username != null) {
+        const un = patch.username.trim().toLowerCase();
+        if (un.length < 3 || /\s/.test(un)) return { ok: false, error: 'اسم المستخدم ٣ أحرف على الأقل وبلا مسافات' };
+        prof.username = un; prof.email = toEmail(un); newEmail = toEmail(un);
+      }
       if (Object.keys(prof).length) {
         const { error } = await supa.from('profiles').update(prof).eq('id', id);
         if (error) return { ok: false, error: error.message };
       }
-      // البريد/كلمة المرور تتطلّب صلاحية الخادم
-      if (patch.email || patch.password) {
-        const r = await callAdmin({ action: 'update', id, email: patch.email, password: patch.password });
+      // تغيير اسم المستخدم (البريد الداخلي)/كلمة المرور يتطلّب صلاحية الخادم
+      if (newEmail || patch.password) {
+        const r = await callAdmin({ action: 'update', id, email: newEmail, password: patch.password });
         if (!r.ok) return r;
       }
       await refreshUsers();

@@ -7,6 +7,7 @@
 create table if not exists public.profiles (
   id          uuid primary key references auth.users(id) on delete cascade,
   email       text not null,
+  username    text unique,
   full_name   text default '',
   position    text default '',
   department  text default '',
@@ -58,9 +59,10 @@ create policy "activity read"       on public.activity for select using (user_id
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer as $$
 begin
-  insert into public.profiles (id, email, full_name, position, department, role, can_export)
+  insert into public.profiles (id, email, username, full_name, position, department, role, can_export)
   values (
     new.id, new.email,
+    coalesce(new.raw_user_meta_data->>'username', split_part(new.email, '@', 1)),
     coalesce(new.raw_user_meta_data->>'full_name', ''),
     coalesce(new.raw_user_meta_data->>'position', ''),
     coalesce(new.raw_user_meta_data->>'department', ''),
