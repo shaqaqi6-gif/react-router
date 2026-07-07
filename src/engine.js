@@ -78,16 +78,16 @@ const _engineExports = {};
 
     // تجميع لكل محطة
     const ST = {};
-    function ensure(sno, cov) {
+    function ensure(sno, cov, fallbackName) {
       if (!ST[sno]) {
         const m = META[sno] || {};
         ST[sno] = {
-          nm: m.nm || '', city: m.city || '', reg: m.reg || '', primstr: m.primstr || '',
+          nm: m.nm || fallbackName || '', city: m.city || '', reg: m.reg || '', primstr: m.primstr || '',
           cov, trips: 0, amt: 0, actual: 0, should: 0, waste: 0, alerts: 0, maxBands: 0,
           centersSet: {}, _byO: {}, _byP: {},
           bench: null, benchD: null, benchR: null, _kmSum: 0,
         };
-      }
+      } else if (!ST[sno].nm && fallbackName) { ST[sno].nm = fallbackName; }
       return ST[sno];
     }
 
@@ -99,7 +99,7 @@ const _engineExports = {};
     };
 
     for (const t of rows) {
-      const sno = t[0], origin = t[1], km = t[2], wt = t[3], amt = t[4], nt = t[5] || 1, prod = t[6] || 'غير محدد';
+      const sno = t[0], origin = t[1], km = t[2], wt = t[3], amt = t[4], nt = t[5] || 1, prod = t[6] || 'غير محدد', destName = t[7] || '';
       if (!sno || km <= 0) continue;
       AGG.total++; AGG.amt += amt;
       const cap = wt >= 28000 ? 'big' : 'small';
@@ -128,7 +128,7 @@ const _engineExports = {};
         const nb = band(proxyMin[sno]);
         const sr = rateOf(P, cap, nb) * nt;
         const w = Math.max(0, amt - sr);
-        const s = ensure(sno, 'proxy');
+        const s = ensure(sno, 'proxy', destName);
         s.trips += nt; s.amt += amt; s.actual += amt; s.should += sr; s.waste += w; s._kmSum += km * nt;
         s.bench = '(أقل مسافة محققة)'; s.benchD = Math.round(proxyMin[sno]); s.benchR = Math.round(rateOf(P, cap, nb));
         const bands = Math.max(0, bb - nb);
@@ -145,7 +145,7 @@ const _engineExports = {};
       const sr = rateOf(P, cap, nb) * nt;
       const w = Math.max(0, amt - sr);
       const bands = Math.max(0, bb - nb);
-      const s = ensure(sno, 'benchmark');
+      const s = ensure(sno, 'benchmark', destName);
       s.trips += nt; s.amt += amt; s.actual += amt; s.should += sr; s.waste += w; s._kmSum += km * nt;
       s.bench = near.name; s.benchD = Math.round(near.km * 10) / 10; s.benchR = Math.round(rateOf(P, cap, nb));
       s.taifFix = near.corrected || false;

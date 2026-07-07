@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.7.6';
+const APP_VERSION = '1.7.7';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -1157,9 +1157,12 @@ function parseInvoiceRows(wb) {
   const rows = [];
   for (let r = 1; r < data.length; r++) {
     const row = data[r]; if (!row || row[iD] == null) continue;
-    const m = ('' + row[iD]).match(/^\s*(\d+)/); const sno = m ? +m[1] : 0;
+    const destStr = ('' + row[iD]).trim();
+    const m = destStr.match(/^\s*(\d+)/); const sno = m ? +m[1] : 0;
     const km = +row[iKM] || 0; if (!sno || km <= 0) continue;
-    rows.push([sno, iO >= 0 ? ('' + (row[iO] || '')).trim() : '', km, +row[iWT] || 0, +row[iAMT] || 0, +row[iNT] || 1, iPR >= 0 ? ('' + (row[iPR] || '')).trim() : 'غير محدد']);
+    const nm = destStr.match(/^\s*\d+\s*[-–—]\s*(.+)$/);      // اسم المحطة بعد الكود «NNN - الاسم»
+    const destName = nm ? nm[1].trim() : '';
+    rows.push([sno, iO >= 0 ? ('' + (row[iO] || '')).trim() : '', km, +row[iWT] || 0, +row[iAMT] || 0, +row[iNT] || 1, iPR >= 0 ? ('' + (row[iPR] || '')).trim() : 'غير محدد', destName]);
   }
   return rows;
 }
