@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.8.0';
+const APP_VERSION = '1.9.0';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -854,6 +854,7 @@ function viewAudit() {
     <button class="atab" data-at="rec">💡 توصيات المعالجة</button>
     <button class="atab" data-at="anom">⚠️ كشف الشذوذ</button>
     <button class="atab" data-at="load">⚖️ كفاءة الحمولة</button>
+    <button class="atab" data-at="tcost">🚚 مقارنة تكلفة النقل</button>
     <button class="atab" data-at="trend">📈 المقارنة الشهرية</button>
   </div>`;
 
@@ -953,7 +954,45 @@ function viewAudit() {
     '<p class="hint">لا سجل بعد — سيُحفظ ملخّص الشهر تلقائياً.</p>'}
     </div></div>`;
 
-  return `<div class="audit-center">${head}${tabs}${report}${root}${rec}${anom}${load}${trend}</div>`;
+  // 7) مقارنة تكلفة النقل (المفوتر مقابل الصحيح)
+  const tc = tcostRows();
+  const tcost = `<div class="apane" data-pane="tcost" hidden>
+    <div class="card"><div class="card-hd"><h3>مقارنة تكلفة النقل — ${AGG.period}</h3><button class="btn ghost sm" id="expTCost">⤓ تصدير Excel</button></div>
+    <p class="hint" style="margin:0 0 12px">لكل محطة: المركز الذي ورّدها فعلاً ومسافته ومبلغه المفوتر، مقابل المركز الصحيح (الأقرب) ومسافته ومبلغه — والفرق المالي. مرتّبة بالأكثر تأثيراً مالياً.</p>
+    <div class="tbl-wrap"><table class="dt tcost-tbl"><thead><tr>
+      <th class="n">م</th><th class="txt">المحطة (DESTINATION)</th><th class="txt">المركز المفوتر (ARAMCO)</th><th class="txt">المنتج</th>
+      <th class="n">كم مفوتر</th><th class="n">مبلغ مفوتر</th><th class="txt">المركز الصحيح</th><th class="n">كم الطريق</th><th class="n">مبلغ الطريق</th>
+      <th class="n">فرق المبلغ</th><th class="n">الردود</th><th class="n">إجمالي الفرق</th>
+    </tr></thead><tbody>
+      ${tc.slice(0, 150).map((r, i) => `<tr class="rowlink" data-sno="${r.sno}"><td class="n">${i + 1}</td><td class="txt"><b>${r.sno}</b> ${r.nm}</td><td class="txt">${r.billedCenter}</td><td class="txt">${r.product}</td><td class="n">${ltr(r.kmTsd)}</td><td class="n">${sar(r.amtTsd)}</td><td class="txt">${r.correct}</td><td class="n">${ltr(r.kmRoad)}</td><td class="n">${sar(r.amtRoad)}</td><td class="n">${sar(r.diff)}</td><td class="n">${num(r.trips)}</td><td class="n crit-num">${sar(r.total)}</td></tr>`).join('')}
+    </tbody></table></div>
+    ${tc.length > 150 ? `<p class="hint" style="margin-top:10px">عرض أعلى 150 محطة تأثيراً — التصدير يشمل الكل (${num(tc.length)})</p>` : ''}
+    </div></div>`;
+
+  return `<div class="audit-center">${head}${tabs}${report}${root}${rec}${anom}${load}${tcost}${trend}</div>`;
+}
+// صفوف مقارنة تكلفة النقل: لكل محطة ذات هدر — المفوتر مقابل الصحيح
+function tcostRows() {
+  return Object.entries(STATIONS)
+    .filter(([, s]) => (s.waste || 0) > 0)
+    .map(([sno, s]) => {
+      const o = originInfo(s);
+      const t = s.trips || 1;
+      return {
+        sno: +sno, nm: s.nm || '', billedCenter: o.main || (s.byO && s.byO[0] ? s.byO[0].orgA : ''),
+        product: (s.byP && s.byP[0]) ? s.byP[0].prod : '',
+        kmTsd: s.avgKmTrip || 0, amtTsd: Math.round(s.actual / t),
+        correct: s.bench || '', kmRoad: s.benchD != null ? s.benchD : '',
+        amtRoad: Math.round(s.should / t),   // الواجب÷الردود ليتسق: مفوتر − طريق = الفرق
+        diff: Math.round(s.waste / t), trips: s.trips || 0, total: s.waste || 0,
+      };
+    })
+    .sort((a, b) => b.total - a.total);
+}
+function exportTCost() {
+  const head = ['SER', '(DESTINATION) المحطة', 'ARAMCO', 'PRODUCT', 'AVG KM (TSD)', 'AVG AMOUNT (TSD)', 'THE CORRECT ARAMCO', 'AVG KM (ROAD)', 'AVG AMOUNT (ROAD)', 'AVG DIFF AMOUNT', 'TRIPS', 'TOTAL AMOUNT DIFF', 'NOTES'];
+  const rows = tcostRows().map((r, i) => [i + 1, `"${r.sno} - ${r.nm}"`, `"${r.billedCenter}"`, `"${r.product}"`, r.kmTsd, r.amtTsd, `"${r.correct}"`, r.kmRoad, r.amtRoad, r.diff, r.trips, r.total, '']);
+  exportSheet(head, rows, `مقارنة_تكلفة_النقل_${AGG.period}.xlsx`);
 }
 /* قاموس التعريفات المركزي — يُستخدم مع infoDot('key') */
 const GLOSSARY = {
@@ -993,6 +1032,7 @@ function wireAudit() {
   $$('.trend-del').forEach(b => b.onclick = () => deletePeriod(b.dataset.period));
   const ea = $('#expAudit'); if (ea) ea.onclick = exportAuditReport;
   const el = $('#expLoad'); if (el) el.onclick = exportLoadReport;
+  const et = $('#expTCost'); if (et) et.onclick = exportTCost;
 }
 function showTip(title, html, anchor) {
   let bd = $('#infoBd');
