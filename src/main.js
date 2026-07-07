@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.4.0';
+const APP_VERSION = '1.5.0';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -601,8 +601,11 @@ function refreshPeriodSel() {
 function exportPeriod(period) {
   const p = PERIODS[period];
   if (!p || !p.STATIONS) { alert(`تفاصيل «${period}» غير محفوظة في هذا المتصفح — افتحها بتبديل الفترة أولاً، أو أعد رفع فاتورتها.`); return; }
-  const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'الردود', 'الفعلي', 'الواجب', 'الفجوة (هدر)', 'التصنيف', 'المركز الموصى به'];
-  const rows = Object.entries(p.STATIONS).map(([sno, o]) => [sno, `"${o.nm || ''}"`, `"${o.city || ''}"`, o.trips || 0, Math.round(o.actual || 0), Math.round(o.should || 0), Math.round(o.waste || 0), `"${o.tier || ''}"`, `"${o.bench || ''}"`]);
+  const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'المنطقة', 'الحالة', 'الردود', 'مركز الانطلاق', 'كل مراكز الانطلاق', 'الفعلي', 'الواجب', 'الفجوة (هدر)', 'التصنيف', 'المركز الأقرب الموصى به', 'كم الطريق الموصى'];
+  const rows = Object.entries(p.STATIONS).map(([sno, o]) => {
+    const org = originInfo(o);
+    return [sno, `"${o.nm || ''}"`, `"${o.city || ''}"`, `"${o.reg || ''}"`, `"${covAr(o.cov)}"`, o.trips || 0, `"${org.main}"`, `"${org.all}"`, Math.round(o.actual || 0), Math.round(o.should || 0), Math.round(o.waste || 0), `"${o.tier || ''}"`, `"${o.bench || ''}"`, o.benchD != null ? o.benchD : ''];
+  });
   const csvTxt = '﻿' + [head.join(','), ...rows.map(r => r.join(','))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csvTxt], { type: 'text/csv;charset=utf-8' }));
@@ -1012,10 +1015,22 @@ function exportLoadReport() {
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   a.download = `مخالفات_الحمولة_${AGG.period}.csv`; a.click();
 }
+// معلومات مركز الانطلاق لمحطة (من كائن محطة يحوي byO)
+function originInfo(s) {
+  if (!s || !s.byO || !s.byO.length) return { main: '', all: '' };
+  const main = s.byO.reduce((a, b) => (b.trips || 0) > (a.trips || 0) ? b : a);
+  return { main: main.orgA || '', all: s.byO.map(o => `${o.orgA} (${o.trips})`).join(' + ') };
+}
+function covAr(cov) { return cov === 'benchmark' ? 'مدرجة بالمرجع' : cov === 'proxy' ? 'ناقصة (خارج المرجع)' : (cov || ''); }
+
 function exportAuditReport() {
   const A = auditAnalyze();
-  const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'الفعلي', 'الواجب', 'الفجوة (هدر)', 'المركز الموصى به', 'كم الموصى', 'السبب', 'التوصية'];
-  const rows = A.reportRows.map(r => [r.sno, `"${r.nm}"`, `"${r.city || ''}"`, r.actual, r.should, r.waste, `"${r.bench}"`, r.benchD, `"${r.cause}"`, `"${r.rec}"`]);
+  const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'المنطقة', 'الحالة', 'عدد الردود', 'مركز الانطلاق', 'كل مراكز الانطلاق', 'الفعلي', 'الواجب', 'الفجوة (هدر)', 'التصنيف', 'المركز الأقرب الموصى به', 'كم الطريق الموصى', 'السبب', 'التوصية'];
+  const rows = A.reportRows.map(r => {
+    const s = STATIONS[r.sno] || {};
+    const o = originInfo(s);
+    return [r.sno, `"${r.nm}"`, `"${r.city || s.city || ''}"`, `"${s.reg || ''}"`, `"${covAr(s.cov)}"`, s.trips || 0, `"${o.main}"`, `"${o.all}"`, r.actual, r.should, r.waste, `"${s.tier || ''}"`, `"${r.bench}"`, r.benchD, `"${r.cause}"`, `"${r.rec}"`];
+  });
   const csv = '\ufeff' + [head.join(','), ...rows.map(r => r.join(','))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));

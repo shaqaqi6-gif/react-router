@@ -29,6 +29,7 @@ const _engineExports = {};
   function runAudit(rows, REF, period) {
     const META = REF.meta, RM = REF.roads, P = REF.price;
     const NAJRAN = new Set(REF.najran), O2A = REF.o2a || {};
+    const DROP_CENTERS = new Set(['أرامكو نجران']);   // مراكز مُزالة نهائياً — لا تُعتمد كمرجع
     const TANKS = REF.tanks || {};
     const centers = RM.centers, roads = RM.roads;
     const INREF = roads; // المحطات المدرجة بالمرجع لها مصفوفة طرق
@@ -51,8 +52,9 @@ const _engineExports = {};
 
     function nearestOf(sno) {
       const r = roads[sno]; if (!r) return null;
-      let best = r[0];
-      for (const x of r) if (x[1] < best[1]) best = x;
+      let best = null;
+      for (const x of r) { if (DROP_CENTERS.has(centers[x[0]])) continue; if (!best || x[1] < best[1]) best = x; }
+      if (!best) return null;
       let km = best[1]; const name = centers[best[0]]; let corrected = false;
       // تصحيح الطائف: اعتمد المسار الإجباري الأطول (السيل) إن كان المفوتر الأدنى أكبر من مرجع الهدا
       if (TAIF.has(+sno) && taifMinKm[sno] != null && taifMinKm[sno] > km + 15) {
@@ -115,13 +117,8 @@ const _engineExports = {};
       const billedRate = rateOf(P, cap, bb);
       const orgA = O2A[origin] || origin;
 
-      // مستثناة (نجران)
-      if (NAJRAN.has(sno)) {
-        AGG.excluded_trips++;
-        const s = ensure(sno, 'excluded');
-        s.trips += nt; s.amt += amt; s._kmSum += km * nt;
-        continue;
-      }
+      // نجران: مُزالة بالكامل — تُسقَط ردودها ولا تُحتسب في أي شيء
+      if (NAJRAN.has(sno)) continue;
 
       // ناقصة (خارج المرجع) — تقييم مقابل أقل مسافة محققة
       if (!INREF[sno]) {
