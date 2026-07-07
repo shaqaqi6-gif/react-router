@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.0';
+const APP_VERSION = '1.9.1';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -955,21 +955,34 @@ function viewAudit() {
     </div></div>`;
 
   // 7) مقارنة تكلفة النقل (المفوتر مقابل الصحيح)
-  const tc = tcostRows();
   const tcost = `<div class="apane" data-pane="tcost" hidden>
     <div class="card"><div class="card-hd"><h3>مقارنة تكلفة النقل — ${AGG.period}</h3><button class="btn ghost sm" id="expTCost">⤓ تصدير Excel</button></div>
     <p class="hint" style="margin:0 0 12px">لكل محطة: المركز الذي ورّدها فعلاً ومسافته ومبلغه المفوتر، مقابل المركز الصحيح (الأقرب) ومسافته ومبلغه — والفرق المالي. مرتّبة بالأكثر تأثيراً مالياً.</p>
+    <div class="tc-searchbar"><span class="tc-sico">🔍</span><input id="tcSearch" type="text" placeholder="ابحث برقم المحطة أو الاسم أو المركز أو المنتج…" autocomplete="off"></div>
     <div class="tbl-wrap"><table class="dt tcost-tbl"><thead><tr>
       <th class="n">م</th><th class="txt">المحطة (DESTINATION)</th><th class="txt">المركز المفوتر (ARAMCO)</th><th class="txt">المنتج</th>
       <th class="n">كم مفوتر</th><th class="n">مبلغ مفوتر</th><th class="txt">المركز الصحيح</th><th class="n">كم الطريق</th><th class="n">مبلغ الطريق</th>
       <th class="n">فرق المبلغ</th><th class="n">الردود</th><th class="n">إجمالي الفرق</th>
-    </tr></thead><tbody>
-      ${tc.slice(0, 150).map((r, i) => `<tr class="rowlink" data-sno="${r.sno}"><td class="n">${i + 1}</td><td class="txt"><b>${r.sno}</b> ${r.nm}</td><td class="txt">${r.billedCenter}</td><td class="txt">${r.product}</td><td class="n">${ltr(r.kmTsd)}</td><td class="n">${sar(r.amtTsd)}</td><td class="txt">${r.correct}</td><td class="n">${ltr(r.kmRoad)}</td><td class="n">${sar(r.amtRoad)}</td><td class="n">${sar(r.diff)}</td><td class="n">${num(r.trips)}</td><td class="n crit-num">${sar(r.total)}</td></tr>`).join('')}
-    </tbody></table></div>
-    ${tc.length > 150 ? `<p class="hint" style="margin-top:10px">عرض أعلى 150 محطة تأثيراً — التصدير يشمل الكل (${num(tc.length)})</p>` : ''}
+    </tr></thead><tbody id="tcBody"></tbody></table></div>
+    <p class="hint" id="tcNote" style="margin-top:10px"></p>
     </div></div>`;
 
   return `<div class="audit-center">${head}${tabs}${report}${root}${rec}${anom}${load}${tcost}${trend}</div>`;
+}
+function tcostRowHTML(r, i) {
+  return `<tr class="rowlink" data-sno="${r.sno}"><td class="n">${i + 1}</td><td class="txt"><b>${r.sno}</b> ${r.nm}</td><td class="txt">${r.billedCenter}</td><td class="txt">${r.product}</td><td class="n">${ltr(r.kmTsd)}</td><td class="n">${sar(r.amtTsd)}</td><td class="txt">${r.correct}</td><td class="n">${ltr(r.kmRoad)}</td><td class="n">${sar(r.amtRoad)}</td><td class="n">${sar(r.diff)}</td><td class="n">${num(r.trips)}</td><td class="n crit-num">${sar(r.total)}</td></tr>`;
+}
+function renderTCostBody(q) {
+  const body = $('#tcBody'); if (!body) return;
+  const query = (q || '').trim().toLowerCase();
+  let rows = tcostRows();
+  if (query) rows = rows.filter(r => `${r.sno} ${r.nm} ${r.billedCenter} ${r.correct} ${r.product}`.toLowerCase().includes(query));
+  const shown = rows.slice(0, query ? 800 : 150);
+  body.innerHTML = shown.length ? shown.map((r, i) => tcostRowHTML(r, i)).join('')
+    : '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:18px">لا نتائج مطابقة</td></tr>';
+  const note = $('#tcNote');
+  if (note) note.textContent = query ? `${num(rows.length)} نتيجة مطابقة` : (rows.length > 150 ? `عرض أعلى 150 محطة تأثيراً — التصدير يشمل الكل (${num(rows.length)})` : '');
+  body.querySelectorAll('.rowlink').forEach(t => t.onclick = () => openModal(+t.dataset.sno));
 }
 // صفوف مقارنة تكلفة النقل: لكل محطة ذات هدر — المفوتر مقابل الصحيح
 function tcostRows() {
@@ -1033,6 +1046,8 @@ function wireAudit() {
   const ea = $('#expAudit'); if (ea) ea.onclick = exportAuditReport;
   const el = $('#expLoad'); if (el) el.onclick = exportLoadReport;
   const et = $('#expTCost'); if (et) et.onclick = exportTCost;
+  renderTCostBody('');   // تعبئة جدول مقارنة النقل
+  const ts = $('#tcSearch'); if (ts) ts.oninput = e => renderTCostBody(e.target.value);
 }
 function showTip(title, html, anchor) {
   let bd = $('#infoBd');
