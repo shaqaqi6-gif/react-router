@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.7.5';
+const APP_VERSION = '1.7.6';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -277,8 +277,11 @@ function wireStations() {
   $('#scity').onchange  = e => { sFilt.city = e.target.value; drawStations(); };
   $('#sexp').onclick = () => {
     const v = stationRows();
-    csv(['رقم المحطة', 'اسم المحطة', 'المدينة', 'التوريد المعتمد', 'الردود', 'أقصى تجاوز', 'التكلفة الفعلية', 'التكلفة الواجبة', 'الهدر', 'التصنيف', 'أقرب مركز', 'كم الأقرب', ...CENTER_COLS],
-      v.map(r => [r.sno, `"${r.nm}"`, r.city, `"${r.primstr}"`, r.trips, r.maxBands, r.actual, r.should, r.waste, r.tier, `"${r.bench || ''}"`, r.benchD || '', ...centerKms(r.sno)]),
+    csv(['رقم المحطة', 'اسم المحطة', 'المدينة', 'مركز الانطلاق (الفاتورة)', 'كل مراكز الانطلاق', 'التوريد المعتمد', 'الردود', 'أقصى تجاوز', 'التكلفة الفعلية', 'التكلفة الواجبة', 'الهدر', 'التصنيف', 'أقرب مركز', 'كم الأقرب', ...CENTER_COLS],
+      v.map(r => {
+        const o = originInfo(STATIONS[r.sno]);
+        return [r.sno, `"${r.nm}"`, r.city, `"${o.main}"`, `"${o.all}"`, `"${r.primstr}"`, r.trips, r.maxBands, r.actual, r.should, r.waste, r.tier, `"${r.bench || ''}"`, r.benchD || '', ...centerKms(r.sno)];
+      }),
       'المحطات.csv');
   };
   sortHeaders(sSort, drawStations);
