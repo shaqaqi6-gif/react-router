@@ -25,7 +25,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.7.1';
+const APP_VERSION = '1.7.2';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -451,9 +451,9 @@ function exportM() {
   const head = ['رقم المحطة', 'اسم المحطة', 'المركز المقيس', 'كم طرق معتمد', 'كم مفوتر (فاتورة)', 'الفرق', 'كم OSRM', 'أقرب مركز', 'كم الأقرب'];
   const gap = (lastM.billed != null && lastM.roadKm != null) ? lastM.billed - lastM.roadKm : '';
   const main = [lastM.code, `"${lastM.n}"`, `"${lastM.target}"`, lastM.roadKm != null ? lastM.roadKm : '', lastM.billed, gap, lastM.osrm != null ? lastM.osrm : '', `"${near}"`, roads[0] ? roads[0].km : ''];
-  const lines = [head.join(','), main.join(',')];
-  if (lastM.all) { lines.push(''); lines.push('المركز,كم طرق'); lastM.all.forEach(r => lines.push(`"${r.name}",${r.km}`)); }
-  csvRaw(lines, 'قياس_' + lastM.code + '.csv');
+  const rows = [main];
+  if (lastM.all && lastM.all.length) { rows.push(head.map(() => '')); rows.push(['كل المراكز:', 'المركز', 'كم طرق']); lastM.all.forEach(r => rows.push(['', `"${r.name}"`, r.km])); }
+  exportSheet(head, rows, 'قياس_' + lastM.code + '.xlsx');
 }
 
 /* ============================================================
@@ -606,10 +606,7 @@ function exportPeriod(period) {
     const org = originInfo(o);
     return [sno, `"${o.nm || ''}"`, `"${o.city || ''}"`, `"${o.reg || ''}"`, `"${covAr(o.cov)}"`, o.trips || 0, `"${org.main}"`, `"${org.all}"`, Math.round(o.actual || 0), Math.round(o.should || 0), Math.round(o.waste || 0), `"${o.tier || ''}"`, `"${o.bench || ''}"`, o.benchD != null ? o.benchD : ''];
   });
-  const csvTxt = '﻿' + [head.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csvTxt], { type: 'text/csv;charset=utf-8' }));
-  a.download = `تقرير_${period}.csv`; a.click();
+  exportSheet(head, rows, `تقرير_${period}.xlsx`);
 }
 // حذف فترة من المقارنة والمخزن (لإزالة الصفوف المكرّرة/القديمة)
 function deletePeriod(period) {
@@ -1010,10 +1007,7 @@ function exportLoadReport() {
   const pAr = { PETROL_91: 'بنزين 91', PETROL_95: 'بنزين 95', DIESEL: 'ديزل', KEROSENE: 'كيروسين' };
   const head = ['رقم المحطة', 'اسم المحطة', 'المدينة', 'المنتج', 'إجمالي الحمولة الفعلية', 'المتوسط لكل ردة', 'الحمولة المثالية', 'امتلاء الناقلة %', 'سعة الخزان', 'ردود حالية', 'بعد الدمج', 'سعر الردة الحالي', 'التكلفة الحالية', 'التكلفة بعد الدمج', 'الوفر'];
   const rows = L.top.map(t => [t.sno, `"${t.nm}"`, `"${t.city || ''}"`, `"${pAr[t.prod] || t.prod}"`, t.totalVol, t.avgLoad, t.ideal, t.util, t.tankKnown ? t.tankCap : 'غير متوفر', t.fromTrips, t.toTrips, t.rateNow, t.costNow, t.costAfter, t.saving]);
-  const csv = '\ufeff' + [head.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  a.download = `مخالفات_الحمولة_${AGG.period}.csv`; a.click();
+  exportSheet(head, rows, `مخالفات_الحمولة_${AGG.period}.xlsx`);
 }
 // معلومات مركز الانطلاق لمحطة (من كائن محطة يحوي byO)
 function originInfo(s) {
@@ -1031,10 +1025,7 @@ function exportAuditReport() {
     const o = originInfo(s);
     return [r.sno, `"${r.nm}"`, `"${r.city || s.city || ''}"`, `"${s.reg || ''}"`, `"${covAr(s.cov)}"`, s.trips || 0, `"${o.main}"`, `"${o.all}"`, r.actual, r.should, r.waste, `"${s.tier || ''}"`, `"${r.bench}"`, r.benchD, `"${r.cause}"`, `"${r.rec}"`];
   });
-  const csv = '\ufeff' + [head.join(','), ...rows.map(r => r.join(','))].join('\n');
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
-  a.download = `تقرير_التدقيق_${AGG.period}.csv`; a.click();
+  exportSheet(head, rows, `تقرير_التدقيق_${AGG.period}.xlsx`);
 }
 
 function viewQuality() {
@@ -1108,7 +1099,29 @@ function csvRaw(lines, name) {
   const blob = new Blob(['\uFEFF' + lines.join('\n')], { type: 'text/csv;charset=utf-8' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name; a.click();
 }
-function csv(head, rows, name) { csvRaw([head.join(','), ...rows.map(r => r.join(','))], name); }
+// \u062A\u0646\u0638\u064A\u0641 \u062E\u0644\u064A\u0629: \u0625\u0632\u0627\u0644\u0629 \u0639\u0644\u0627\u0645\u0627\u062A \u0627\u0642\u062A\u0628\u0627\u0633 CSV \u0627\u0644\u0642\u062F\u064A\u0645\u0629 \u0648\u062A\u062D\u0648\u064A\u0644 \u0627\u0644\u0623\u0631\u0642\u0627\u0645 \u0627\u0644\u0646\u0635\u064A\u0629 \u0644\u0623\u0631\u0642\u0627\u0645 \u062D\u0642\u064A\u0642\u064A\u0629
+function cleanCell(v) {
+  if (typeof v === 'number') return v;
+  let s = String(v == null ? '' : v);
+  if (s.length >= 2 && s[0] === '"' && s[s.length - 1] === '"') s = s.slice(1, -1).replace(/""/g, '"');
+  if (s !== '' && /^-?\d+(\.\d+)?$/.test(s) && s.length < 15) return Number(s);
+  return s;
+}
+// \u062A\u0635\u062F\u064A\u0631 \u0643\u0645\u0644\u0641 Excel \u062D\u0642\u064A\u0642\u064A (.xlsx) \u2014 \u0623\u0639\u0645\u062F\u0629 \u0646\u0638\u064A\u0641\u0629\u060C \u062F\u0639\u0645 \u0639\u0631\u0628\u064A RTL\u060C \u0628\u0644\u0627 \u0645\u0634\u0627\u0643\u0644 \u0641\u0648\u0627\u0635\u0644
+function exportSheet(head, rows, filename) {
+  const aoa = [head, ...rows.map(r => r.map(cleanCell))];
+  const ws = XLSX.utils.aoa_to_sheet(aoa);
+  ws['!cols'] = head.map((h, i) => {
+    let w = String(h).length;
+    for (const r of aoa) { const c = r[i]; const len = c == null ? 0 : String(c).length; if (len > w) w = len; }
+    return { wch: Math.min(48, w + 2) };
+  });
+  const wb = XLSX.utils.book_new();
+  wb.Workbook = { Views: [{ RTL: true }] };   // \u0627\u062A\u062C\u0627\u0647 \u0627\u0644\u0648\u0631\u0642\u0629 \u0645\u0646 \u0627\u0644\u064A\u0645\u064A\u0646 \u0644\u0644\u064A\u0633\u0627\u0631
+  XLSX.utils.book_append_sheet(wb, ws, '\u0627\u0644\u062A\u0642\u0631\u064A\u0631');
+  XLSX.writeFile(wb, filename.replace(/\.csv$/i, '.xlsx'));
+}
+function csv(head, rows, name) { exportSheet(head, rows, name); }
 
 /* ============================================================
    الرفع الذاتي لفواتير شهر جديد
