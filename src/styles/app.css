@@ -488,3 +488,4 @@ body.no-export .trend-exp{display:none!important}
 /* عمود المركز المعتمد (أرامكو): أخضر إن طابق الأقرب المحسوب، برتقالي إن اختلف */
 .appr-ok{color:var(--ok);font-weight:600}
 .appr-diff{color:var(--warn);font-weight:600}
+.appr-def{color:var(--muted);font-style:italic}   /* معتمد تقديري = أقرب مركز (لا رد أرامكو رسمي) */

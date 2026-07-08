@@ -27,7 +27,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.5';
+const APP_VERSION = '1.9.6';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -973,7 +973,10 @@ function viewAudit() {
 }
 function tcostRowHTML(r, i) {
   const appOk = r.approved && r.correct && r.approved === r.correct;
-  const appCell = r.approved ? `<span class="${appOk ? 'appr-ok' : 'appr-diff'}">${r.approved}</span>` : '<span class="sub2">—</span>';
+  let appCell;
+  if (!r.approved) appCell = '<span class="sub2">—</span>';
+  else if (r.apprOfficial) appCell = `<span class="${appOk ? 'appr-ok' : 'appr-diff'}">${r.approved}</span>`;
+  else appCell = `<span class="appr-def" title="تقديري: أقرب مركز مرجعي — لا يوجد رد أرامكو رسمي مسجّل لهذه المحطة">${r.approved} ≈</span>`;
   return `<tr class="rowlink" data-sno="${r.sno}"><td class="n">${i + 1}</td><td class="txt"><b>${r.sno}</b> ${r.nm}</td><td class="txt">${r.billedCenter}</td><td class="txt">${r.product}</td><td class="n">${ltr(r.kmTsd)}</td><td class="n">${sar(r.amtTsd)}</td><td class="txt">${r.correct}</td><td class="txt">${appCell}</td><td class="n">${ltr(r.kmRoad)}</td><td class="n">${sar(r.amtRoad)}</td><td class="n">${sar(r.diff)}</td><td class="n">${num(r.trips)}</td><td class="n crit-num">${sar(r.total)}</td></tr>`;
 }
 function renderTCostBody(q) {
@@ -996,6 +999,10 @@ function tcostRows() {
     const prod = (s.byP && s.byP[0]) ? s.byP[0].prod : '';
     const byO = (s.byO && s.byO.length) ? s.byO
       : [{ orgA: originInfo(s).main, trips: s.trips, rate: Math.round(s.actual / (s.trips || 1)), kmTrip: s.avgKmTrip, waste: s.waste }];
+    // المركز المعتمد: رد أرامكو الرسمي (Q1-2026) إن وُجد، وإلا نرجع لأقرب مركز مرجعي
+    const apprOfficial = !!APPROVED[snoStr];
+    const gnear = (GEO[snoStr] && GEO[snoStr].near) || '';
+    const approved = APPROVED[snoStr] || (/^أرامكو/.test(gnear) ? gnear : (/^أرامكو/.test(s.bench || '') ? s.bench : ''));
     for (const o of byO) {
       const t = o.trips || 1;
       const diff = Math.round((o.waste || 0) / t);        // فرق الردة لهذا المركز
@@ -1004,7 +1011,7 @@ function tcostRows() {
         billedCenter: o.orgA || '', product: prod,
         kmTsd: o.kmTrip || 0, amtTsd: Math.round(o.rate || 0),
         correct: s.bench || '', kmRoad: s.benchD != null ? s.benchD : '',
-        approved: APPROVED[snoStr] || '',   // المركز المعتمد من أرامكو (ردود Q1-2026)
+        approved, apprOfficial,   // المركز المعتمد من أرامكو (رسمي إن وُجد، وإلا تقديري = الأقرب)
         amtRoad: Math.max(0, Math.round((o.rate || 0)) - diff),   // المفوتر − الفرق = مبلغ الطريق الصحيح
         diff, trips: o.trips || 0, total: Math.round(o.waste || 0),
       });
@@ -1014,7 +1021,7 @@ function tcostRows() {
 }
 function exportTCost() {
   const head = ['SER', '(DESTINATION) المحطة', 'ARAMCO', 'PRODUCT', 'AVG KM (TSD)', 'AVG AMOUNT (TSD)', 'THE CORRECT ARAMCO', 'المركز المعتمد (أرامكو)', 'AVG KM (ROAD)', 'AVG AMOUNT (ROAD)', 'AVG DIFF AMOUNT', 'TRIPS', 'TOTAL AMOUNT DIFF', 'NOTES'];
-  const rows = tcostRows().map((r, i) => [i + 1, `"${r.sno} - ${r.nm}"`, `"${r.billedCenter}"`, `"${r.product}"`, r.kmTsd, r.amtTsd, `"${r.correct}"`, `"${r.approved}"`, r.kmRoad, r.amtRoad, r.diff, r.trips, r.total, '']);
+  const rows = tcostRows().map((r, i) => [i + 1, `"${r.sno} - ${r.nm}"`, `"${r.billedCenter}"`, `"${r.product}"`, r.kmTsd, r.amtTsd, `"${r.correct}"`, `"${r.approved}${r.approved && !r.apprOfficial ? ' (تقديري)' : ''}"`, r.kmRoad, r.amtRoad, r.diff, r.trips, r.total, r.approved && !r.apprOfficial ? 'المعتمد تقديري = أقرب مركز (لا رد أرامكو رسمي)' : '']);
   exportSheet(head, rows, `مقارنة_تكلفة_النقل_${AGG.period}.xlsx`);
 }
 /* قاموس التعريفات المركزي — يُستخدم مع infoDot('key') */
