@@ -27,7 +27,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.4';
+const APP_VERSION = '1.9.5';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
