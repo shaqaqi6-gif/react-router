@@ -29,7 +29,7 @@ const sarD = (n, d = 3) => ltr(numD(n, d));                               // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.13';
+const APP_VERSION = '1.9.14';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
