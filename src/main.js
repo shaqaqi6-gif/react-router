@@ -27,7 +27,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.7';
+const APP_VERSION = '1.9.8';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -959,7 +959,7 @@ function viewAudit() {
   // 7) مقارنة تكلفة النقل (المفوتر مقابل الصحيح)
   const tcost = `<div class="apane" data-pane="tcost" hidden>
     <div class="card"><div class="card-hd"><h3>مقارنة تكلفة النقل — ${AGG.period}</h3><button class="btn ghost sm" id="expTCost">⤓ تصدير Excel</button></div>
-    <p class="hint" style="margin:0 0 12px">صفٌّ لكل <b>مركز انطلاق</b> ورّد المحطة (المحطة الواحدة قد تُورَّد من أكثر من مركز): كم ومبلغ المفوتر من ذلك المركز، مقابل المركز الصحيح (الأقرب) ومسافته ومبلغه — والفرق المالي. مرتّبة بالأكثر تأثيراً مالياً.</p>
+    <p class="hint" style="margin:0 0 12px">صفٌّ لكل <b>مركز انطلاق</b> ورّد المحطة (المحطة الواحدة قد تُورَّد من أكثر من مركز): كم ومبلغ المفوتر من ذلك المركز، مقابل المركز الصحيح (الأقرب) ومسافته ومبلغه — والفرق المالي. مرتّبة بالأكثر تأثيراً مالياً. <b>تُستبعَد الصفوف ذات فرق مبلغ للردة أقل من ${TCOST_MIN_DIFF} ر.س.</b></p>
     <div class="tc-searchbar"><span class="tc-sico">🔍</span><input id="tcSearch" type="text" placeholder="ابحث برقم المحطة أو الاسم أو المركز أو المنتج…" autocomplete="off"></div>
     <div class="tbl-wrap"><table class="dt tcost-tbl"><thead><tr>
       <th class="n">م</th><th class="txt">المحطة (DESTINATION)</th><th class="txt">المركز المفوتر (ARAMCO)</th><th class="txt">المنتج</th>
@@ -1017,8 +1017,10 @@ function tcostRows() {
       });
     }
   }
-  return out.sort((a, b) => b.total - a.total);
+  // تجاهل الصفوف ذات فرق مبلغ ضئيل (أقل من 110 ر.س للردة) — لا تستحق المتابعة
+  return out.filter(r => r.diff >= TCOST_MIN_DIFF).sort((a, b) => b.total - a.total);
 }
+const TCOST_MIN_DIFF = 110;   // حد أدنى لفرق المبلغ للردة في مقارنة تكلفة النقل
 function exportTCost() {
   const head = ['SER', '(DESTINATION) المحطة', 'ARAMCO', 'PRODUCT', 'AVG KM (TSD)', 'AVG AMOUNT (TSD)', 'THE CORRECT ARAMCO', 'المركز المعتمد (أرامكو)', 'AVG KM (ROAD)', 'AVG AMOUNT (ROAD)', 'AVG DIFF AMOUNT', 'TRIPS', 'TOTAL AMOUNT DIFF', 'NOTES'];
   const rows = tcostRows().map((r, i) => [i + 1, `"${r.sno} - ${r.nm}"`, `"${r.billedCenter}"`, `"${r.product}"`, r.kmTsd, r.amtTsd, `"${r.correct}"`, `"${r.approved}${r.approved && !r.apprOfficial ? ' (تقديري)' : ''}"`, r.kmRoad, r.amtRoad, r.diff, r.trips, r.total, r.approved && !r.apprOfficial ? 'المعتمد تقديري = أقرب مركز (لا رد أرامكو رسمي)' : '']);
