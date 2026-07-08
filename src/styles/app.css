@@ -485,3 +485,6 @@ body.no-export .trend-exp{display:none!important}
 .tc-searchbar .tc-sico{position:absolute;top:50%;right:12px;transform:translateY(-50%);font-size:13px;opacity:.6;pointer-events:none}
 .tc-searchbar input{width:100%;font-family:var(--body);font-size:13px;padding:10px 38px 10px 14px;border:1px solid var(--line-2);border-radius:11px;background:var(--surface);color:var(--ink);transition:border-color .15s,box-shadow .15s}
 .tc-searchbar input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--wash)}
+/* عمود المركز المعتمد (أرامكو): أخضر إن طابق الأقرب المحسوب، برتقالي إن اختلف */
+.appr-ok{color:var(--ok);font-weight:600}
+.appr-diff{color:var(--warn);font-weight:600}

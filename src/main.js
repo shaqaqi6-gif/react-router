@@ -4,7 +4,7 @@ import 'leaflet/dist/leaflet.css';
 import * as L from 'leaflet';
 import * as XLSX from 'xlsx';
 import { AldreesAudit } from './engine.js';
-import { initialAGG, initialStations, GEO, CENTERS, RM, REF } from './data.js';
+import { initialAGG, initialStations, GEO, CENTERS, RM, REF, APPROVED } from './data.js';
 import { applyCorrections } from './corrections.js';
 import auth from './auth.js';
 
@@ -27,7 +27,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.3';
+const APP_VERSION = '1.9.4';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -963,7 +963,7 @@ function viewAudit() {
     <div class="tc-searchbar"><span class="tc-sico">🔍</span><input id="tcSearch" type="text" placeholder="ابحث برقم المحطة أو الاسم أو المركز أو المنتج…" autocomplete="off"></div>
     <div class="tbl-wrap"><table class="dt tcost-tbl"><thead><tr>
       <th class="n">م</th><th class="txt">المحطة (DESTINATION)</th><th class="txt">المركز المفوتر (ARAMCO)</th><th class="txt">المنتج</th>
-      <th class="n">كم مفوتر</th><th class="n">مبلغ مفوتر</th><th class="txt">المركز الصحيح (الأقرب)</th><th class="n">كم الطريق</th><th class="n">مبلغ الطريق</th>
+      <th class="n">كم مفوتر</th><th class="n">مبلغ مفوتر</th><th class="txt">المركز الصحيح (الأقرب)</th><th class="txt">المعتمد (أرامكو)</th><th class="n">كم الطريق</th><th class="n">مبلغ الطريق</th>
       <th class="n">فرق المبلغ</th><th class="n">الردود</th><th class="n">إجمالي الفرق</th>
     </tr></thead><tbody id="tcBody"></tbody></table></div>
     <p class="hint" id="tcNote" style="margin-top:10px"></p>
@@ -972,16 +972,18 @@ function viewAudit() {
   return `<div class="audit-center">${head}${tabs}${report}${root}${rec}${anom}${load}${tcost}${trend}</div>`;
 }
 function tcostRowHTML(r, i) {
-  return `<tr class="rowlink" data-sno="${r.sno}"><td class="n">${i + 1}</td><td class="txt"><b>${r.sno}</b> ${r.nm}</td><td class="txt">${r.billedCenter}</td><td class="txt">${r.product}</td><td class="n">${ltr(r.kmTsd)}</td><td class="n">${sar(r.amtTsd)}</td><td class="txt">${r.correct}</td><td class="n">${ltr(r.kmRoad)}</td><td class="n">${sar(r.amtRoad)}</td><td class="n">${sar(r.diff)}</td><td class="n">${num(r.trips)}</td><td class="n crit-num">${sar(r.total)}</td></tr>`;
+  const appOk = r.approved && r.correct && r.approved === r.correct;
+  const appCell = r.approved ? `<span class="${appOk ? 'appr-ok' : 'appr-diff'}">${r.approved}</span>` : '<span class="sub2">—</span>';
+  return `<tr class="rowlink" data-sno="${r.sno}"><td class="n">${i + 1}</td><td class="txt"><b>${r.sno}</b> ${r.nm}</td><td class="txt">${r.billedCenter}</td><td class="txt">${r.product}</td><td class="n">${ltr(r.kmTsd)}</td><td class="n">${sar(r.amtTsd)}</td><td class="txt">${r.correct}</td><td class="txt">${appCell}</td><td class="n">${ltr(r.kmRoad)}</td><td class="n">${sar(r.amtRoad)}</td><td class="n">${sar(r.diff)}</td><td class="n">${num(r.trips)}</td><td class="n crit-num">${sar(r.total)}</td></tr>`;
 }
 function renderTCostBody(q) {
   const body = $('#tcBody'); if (!body) return;
   const query = (q || '').trim().toLowerCase();
   let rows = tcostRows();
-  if (query) rows = rows.filter(r => `${r.sno} ${r.nm} ${r.billedCenter} ${r.correct} ${r.product}`.toLowerCase().includes(query));
+  if (query) rows = rows.filter(r => `${r.sno} ${r.nm} ${r.billedCenter} ${r.correct} ${r.approved} ${r.product}`.toLowerCase().includes(query));
   const shown = rows.slice(0, query ? 800 : 150);
   body.innerHTML = shown.length ? shown.map((r, i) => tcostRowHTML(r, i)).join('')
-    : '<tr><td colspan="12" style="text-align:center;color:var(--muted);padding:18px">لا نتائج مطابقة</td></tr>';
+    : '<tr><td colspan="13" style="text-align:center;color:var(--muted);padding:18px">لا نتائج مطابقة</td></tr>';
   const note = $('#tcNote');
   if (note) note.textContent = query ? `${num(rows.length)} نتيجة مطابقة` : (rows.length > 150 ? `عرض أعلى 150 محطة تأثيراً — التصدير يشمل الكل (${num(rows.length)})` : '');
   body.querySelectorAll('.rowlink').forEach(t => t.onclick = () => openModal(+t.dataset.sno));
@@ -1002,6 +1004,7 @@ function tcostRows() {
         billedCenter: o.orgA || '', product: prod,
         kmTsd: o.kmTrip || 0, amtTsd: Math.round(o.rate || 0),
         correct: s.bench || '', kmRoad: s.benchD != null ? s.benchD : '',
+        approved: APPROVED[snoStr] || '',   // المركز المعتمد من أرامكو (ردود Q1-2026)
         amtRoad: Math.max(0, Math.round((o.rate || 0)) - diff),   // المفوتر − الفرق = مبلغ الطريق الصحيح
         diff, trips: o.trips || 0, total: Math.round(o.waste || 0),
       });
@@ -1010,8 +1013,8 @@ function tcostRows() {
   return out.sort((a, b) => b.total - a.total);
 }
 function exportTCost() {
-  const head = ['SER', '(DESTINATION) المحطة', 'ARAMCO', 'PRODUCT', 'AVG KM (TSD)', 'AVG AMOUNT (TSD)', 'THE CORRECT ARAMCO', 'AVG KM (ROAD)', 'AVG AMOUNT (ROAD)', 'AVG DIFF AMOUNT', 'TRIPS', 'TOTAL AMOUNT DIFF', 'NOTES'];
-  const rows = tcostRows().map((r, i) => [i + 1, `"${r.sno} - ${r.nm}"`, `"${r.billedCenter}"`, `"${r.product}"`, r.kmTsd, r.amtTsd, `"${r.correct}"`, r.kmRoad, r.amtRoad, r.diff, r.trips, r.total, '']);
+  const head = ['SER', '(DESTINATION) المحطة', 'ARAMCO', 'PRODUCT', 'AVG KM (TSD)', 'AVG AMOUNT (TSD)', 'THE CORRECT ARAMCO', 'المركز المعتمد (أرامكو)', 'AVG KM (ROAD)', 'AVG AMOUNT (ROAD)', 'AVG DIFF AMOUNT', 'TRIPS', 'TOTAL AMOUNT DIFF', 'NOTES'];
+  const rows = tcostRows().map((r, i) => [i + 1, `"${r.sno} - ${r.nm}"`, `"${r.billedCenter}"`, `"${r.product}"`, r.kmTsd, r.amtTsd, `"${r.correct}"`, `"${r.approved}"`, r.kmRoad, r.amtRoad, r.diff, r.trips, r.total, '']);
   exportSheet(head, rows, `مقارنة_تكلفة_النقل_${AGG.period}.xlsx`);
 }
 /* قاموس التعريفات المركزي — يُستخدم مع infoDot('key') */
