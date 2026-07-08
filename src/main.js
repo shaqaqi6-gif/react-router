@@ -27,7 +27,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.9';
+const APP_VERSION = '1.9.10';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -964,7 +964,7 @@ function viewAudit() {
     <div class="tbl-wrap"><table class="dt tcost-tbl"><thead><tr>
       <th class="n">م</th><th class="txt">المحطة (DESTINATION)</th><th class="txt">المركز المفوتر (ARAMCO)</th><th class="txt">المنتج</th>
       <th class="n">كم مفوتر</th><th class="n">مبلغ مفوتر</th><th class="txt">المركز الصحيح (الأقرب)</th><th class="txt">المعتمد (أرامكو)</th><th class="n">كم الطريق</th><th class="n">مبلغ الطريق</th>
-      <th class="n">فرق المبلغ</th><th class="n">الردود</th><th class="n">إجمالي الفرق</th>
+      <th class="n" title="متوسط فرق الردة مقرّباً لأقرب ريال (المفوتر − الطريق). الإجمالي محسوب بدقة لكل ردة، فقد يختلف قليلاً عن حاصل ضرب المتوسط في عدد الردود بسبب التقريب.">فرق المبلغ</th><th class="n">الردود</th><th class="n" title="المجموع الفعلي الدقيق لفروقات كل الردود — يطابق الهدر الإجمالي في لوحة التحكم.">إجمالي الفرق</th>
     </tr></thead><tbody id="tcBody"></tbody></table></div>
     <p class="hint" id="tcNote" style="margin-top:10px"></p>
     </div></div>`;
