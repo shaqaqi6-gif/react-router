@@ -29,7 +29,9 @@ const sarD = (n, d = 3) => ltr(numD(n, d));                               // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.14';
+const APP_VERSION = '1.9.15';
+// بصمة بيانات المرجع/المحرّك — عند تغيّرها تُلغى الفترات المرفوعة المخزّنة (لأنها حُسبت بمسافات/منطق قديم)
+const DATA_VERSION = 'roads-v6.0+tol110';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -580,7 +582,15 @@ function snapshotGeoTrips() {
   return g;
 }
 function loadPeriodsStore() {
-  try { const raw = JSON.parse(localStorage.getItem('aldrees_periods') || '{}'); for (const k in raw) PERIODS[k] = raw[k]; } catch (e) {}
+  try {
+    // إلغاء الفترات المخزّنة إن تغيّرت بصمة البيانات (مسافات/محرّك) — لتُعاد بالحساب الصحيح
+    if (localStorage.getItem('aldrees_data_ver') !== DATA_VERSION) {
+      localStorage.removeItem('aldrees_periods');
+      localStorage.setItem('aldrees_data_ver', DATA_VERSION);
+      return;
+    }
+    const raw = JSON.parse(localStorage.getItem('aldrees_periods') || '{}'); for (const k in raw) PERIODS[k] = raw[k];
+  } catch (e) {}
 }
 function persistPeriods() {
   try { localStorage.setItem('aldrees_periods', JSON.stringify(PERIODS)); return true; } catch (e) { return false; }
