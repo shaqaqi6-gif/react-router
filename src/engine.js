@@ -180,19 +180,29 @@ const _engineExports = {};
     // إنهاء البنية
     const STATIONS = {}, GEO_trips = {};
     const tiers = {}, bandsDist = { '0': 0, '1': 0, '2': 0, '3': 0, '4': 0, '5': 0, '6': 0 };
+    // تفاوت مسموح: أي مركز انطلاق فرقه للردة أقل من TOL ر.س يُعتبر مقبولاً (لا هدر)
+    const TOL = (REF.tolPerTrip != null) ? REF.tolPerTrip : 110;
+    let totalForgiven = 0;
     for (const [sno, s] of Object.entries(ST)) {
-      const tier = tierOf(s.waste, s.cov);
-      tiers[tier] = (tiers[tier] || 0) + 1;
       const byO = Object.values(s._byO).map(o => ({
         org: o.org, orgA: o.orgA, trips: o.trips, rate: Math.round(o._rsum / o.trips),
         kmTrip: Math.round(o._kmSum / o.trips), kmRoad: o.kmRoad, bands: o.bands, waste: Math.round(o.waste), pover: o.pover,
       })).sort((a, b) => b.waste - a.waste);
+      // تطبيق التفاوت المسموح: صفّر هدر المراكز ذات فرق الردة < TOL واحسب المُعفى
+      let forgiven = 0;
+      for (const o of byO) {
+        if (o.waste > 0 && o.waste / o.trips < TOL) { forgiven += o.waste; o.waste = 0; o.tol = true; }
+      }
+      const sWaste = Math.max(0, Math.round(s.waste) - forgiven);
+      totalForgiven += forgiven;
+      const tier = tierOf(sWaste, s.cov);
+      tiers[tier] = (tiers[tier] || 0) + 1;
       const byP = Object.values(s._byP).map(p => ({ prod: p.prod, trips: p.trips, amt: Math.round(p.amt), rate: Math.round(p._rsum / p.trips) }))
         .sort((a, b) => b.trips - a.trips);
       STATIONS[sno] = {
         nm: s.nm, city: s.city, reg: s.reg, primstr: s.primstr, cov: s.cov,
-        trips: s.trips, amt: Math.round(s.amt), actual: Math.round(s.actual), should: Math.round(s.should),
-        waste: Math.round(s.waste), alerts: s.alerts, maxBands: s.maxBands, tier,
+        trips: s.trips, amt: Math.round(s.amt), actual: Math.round(s.actual), should: Math.round(s.should) + forgiven,
+        waste: sWaste, alerts: s.alerts, maxBands: s.maxBands, tier,
         bench: s.bench, benchD: s.benchD, benchR: s.benchR, taifFix: s.taifFix || false,
         avgKmTrip: Math.round(s._kmSum / s.trips), centers: Object.keys(s.centersSet).length, byO, byP,
       };
@@ -206,7 +216,9 @@ const _engineExports = {};
     // إنهاء المجاميع
     for (const o of Object.values(AGG.byOrigin)) o.rate = Math.round(o._rsum / o._rn);
     for (const p of Object.values(AGG.byProduct)) p.rate = Math.round(p._rsum / p._rn);
-    AGG.actual = Math.round(AGG.actual); AGG.should = Math.round(AGG.should); AGG.waste = Math.round(AGG.waste); AGG.amt = Math.round(AGG.amt);
+    // خصم الهدر المُعفى (التفاوت المسموح < TOL) من المجاميع لاتساق الإحصائيات
+    AGG.actual = Math.round(AGG.actual); AGG.should = Math.round(AGG.should) + totalForgiven; AGG.waste = Math.max(0, Math.round(AGG.waste) - totalForgiven); AGG.amt = Math.round(AGG.amt);
+    AGG.tolPerTrip = TOL; AGG.forgiven = Math.round(totalForgiven);
     AGG.wastePct = AGG.actual ? Math.round(1000 * AGG.waste / AGG.actual) / 10 : 0;
     AGG.compliance = (AGG.ok + AGG.alert) ? Math.round(100 * AGG.ok / (AGG.ok + AGG.alert)) : 0;
     AGG.stations = Object.values(STATIONS).filter(s => s.cov === 'benchmark').length;

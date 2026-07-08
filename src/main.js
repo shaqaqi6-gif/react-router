@@ -27,7 +27,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.8';
+const APP_VERSION = '1.9.9';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -117,7 +117,7 @@ function viewOverview() {
         <div class="h-main">
           <div class="eyebrow">الفعلي مقابل الواجب · ${a.period}</div>
           <div class="num">${sar(a.waste)} <small>ر.س هدر</small></div>
-          <div class="sub">الفعلي ${sar(a.actual)} − الواجب من الأقرب ${sar(a.should)} = هدر ${a.wastePct}% من قيمة النقل القابلة للقياس</div>
+          <div class="sub">الفعلي ${sar(a.actual)} − الواجب من الأقرب ${sar(a.should)} = هدر ${a.wastePct}% من قيمة النقل القابلة للقياس${a.tolPerTrip ? ` · تفاوت مسموح &lt; ${a.tolPerTrip} ر.س/ردة (مُعفى ${sar(a.forgiven || 0)})` : ''}</div>
         </div>
         <div class="h-stat"><div class="v">${sar(a.total)}</div><div class="l">عدد الردود المدققة</div></div>
         <div class="h-stat"><div class="v warn">${sar(a.alert)}</div><div class="l">ردود بتنبيه</div></div>
