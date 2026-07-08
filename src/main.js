@@ -5,11 +5,13 @@ import * as L from 'leaflet';
 import * as XLSX from 'xlsx';
 import { AldreesAudit } from './engine.js';
 import { initialAGG, initialStations, GEO, CENTERS, RM, REF } from './data.js';
+import { applyCorrections } from './corrections.js';
 import auth from './auth.js';
 
 window.L = L;            // حارس waitL() القديم يفحص window.L
 let AGG = initialAGG;    // قابلان لإعادة الإسناد عند رفع فاتورة
 let STATIONS = initialStations;
+applyCorrections(STATIONS, AGG);   // تصحيح المحطات ذات مصفوفة الطرق الخاطئة (مثل 915)
 
 /* ============================================================
    نظام تدقيق نقليات الدريس — منطق التطبيق (نسخة نظيفة)
@@ -25,7 +27,7 @@ const sar = n => ltr(num(n));                                             // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.2';
+const APP_VERSION = '1.9.3';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -961,7 +963,7 @@ function viewAudit() {
     <div class="tc-searchbar"><span class="tc-sico">🔍</span><input id="tcSearch" type="text" placeholder="ابحث برقم المحطة أو الاسم أو المركز أو المنتج…" autocomplete="off"></div>
     <div class="tbl-wrap"><table class="dt tcost-tbl"><thead><tr>
       <th class="n">م</th><th class="txt">المحطة (DESTINATION)</th><th class="txt">المركز المفوتر (ARAMCO)</th><th class="txt">المنتج</th>
-      <th class="n">كم مفوتر</th><th class="n">مبلغ مفوتر</th><th class="txt">المركز الصحيح</th><th class="n">كم الطريق</th><th class="n">مبلغ الطريق</th>
+      <th class="n">كم مفوتر</th><th class="n">مبلغ مفوتر</th><th class="txt">المركز الصحيح (الأقرب)</th><th class="n">كم الطريق</th><th class="n">مبلغ الطريق</th>
       <th class="n">فرق المبلغ</th><th class="n">الردود</th><th class="n">إجمالي الفرق</th>
     </tr></thead><tbody id="tcBody"></tbody></table></div>
     <p class="hint" id="tcNote" style="margin-top:10px"></p>
