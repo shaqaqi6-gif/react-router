@@ -22,12 +22,14 @@ applyCorrections(STATIONS, AGG);   // تصحيح المحطات ذات مصفو�
 const $  = s => document.querySelector(s);
 const $$ = s => document.querySelectorAll(s);
 const num = n => Math.round(Number(n) || 0).toLocaleString('en-US');     // رقم بفواصل
+const numD = (n, d = 3) => (Number(n) || 0).toLocaleString('en-US', { maximumFractionDigits: d });   // رقم بكسور (يحذف الأصفار الزائدة)
 const ltr = s => `<span class="ltr">${s}</span>`;                         // رقم باتجاه LTR
 const sar = n => ltr(num(n));                                             // مبلغ
+const sarD = (n, d = 3) => ltr(numD(n, d));                               // مبلغ بكسور دقيقة
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.10';
+const APP_VERSION = '1.9.11';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
@@ -964,7 +966,7 @@ function viewAudit() {
     <div class="tbl-wrap"><table class="dt tcost-tbl"><thead><tr>
       <th class="n">م</th><th class="txt">المحطة (DESTINATION)</th><th class="txt">المركز المفوتر (ARAMCO)</th><th class="txt">المنتج</th>
       <th class="n">كم مفوتر</th><th class="n">مبلغ مفوتر</th><th class="txt">المركز الصحيح (الأقرب)</th><th class="txt">المعتمد (أرامكو)</th><th class="n">كم الطريق</th><th class="n">مبلغ الطريق</th>
-      <th class="n" title="متوسط فرق الردة مقرّباً لأقرب ريال (المفوتر − الطريق). الإجمالي محسوب بدقة لكل ردة، فقد يختلف قليلاً عن حاصل ضرب المتوسط في عدد الردود بسبب التقريب.">فرق المبلغ</th><th class="n">الردود</th><th class="n" title="المجموع الفعلي الدقيق لفروقات كل الردود — يطابق الهدر الإجمالي في لوحة التحكم.">إجمالي الفرق</th>
+      <th class="n" title="فرق الردة الفعلي (بكسوره) = إجمالي الفرق ÷ الردود. فرق المبلغ × الردود = إجمالي الفرق.">فرق المبلغ</th><th class="n">الردود</th><th class="n" title="المجموع الفعلي لفروقات كل الردود — يطابق الهدر الإجمالي في لوحة التحكم.">إجمالي الفرق</th>
     </tr></thead><tbody id="tcBody"></tbody></table></div>
     <p class="hint" id="tcNote" style="margin-top:10px"></p>
     </div></div>`;
@@ -977,7 +979,7 @@ function tcostRowHTML(r, i) {
   if (!r.approved) appCell = '<span class="sub2">—</span>';
   else if (r.apprOfficial) appCell = `<span class="${appOk ? 'appr-ok' : 'appr-diff'}">${r.approved}</span>`;
   else appCell = `<span class="appr-def" title="تقديري: أقرب مركز مرجعي — لا يوجد رد أرامكو رسمي مسجّل لهذه المحطة">${r.approved} ≈</span>`;
-  return `<tr class="rowlink" data-sno="${r.sno}"><td class="n">${i + 1}</td><td class="txt"><b>${r.sno}</b> ${r.nm}</td><td class="txt">${r.billedCenter}</td><td class="txt">${r.product}</td><td class="n">${ltr(r.kmTsd)}</td><td class="n">${sar(r.amtTsd)}</td><td class="txt">${r.correct}</td><td class="txt">${appCell}</td><td class="n">${ltr(r.kmRoad)}</td><td class="n">${sar(r.amtRoad)}</td><td class="n">${sar(r.diff)}</td><td class="n">${num(r.trips)}</td><td class="n crit-num">${sar(r.total)}</td></tr>`;
+  return `<tr class="rowlink" data-sno="${r.sno}"><td class="n">${i + 1}</td><td class="txt"><b>${r.sno}</b> ${r.nm}</td><td class="txt">${r.billedCenter}</td><td class="txt">${r.product}</td><td class="n">${ltr(r.kmTsd)}</td><td class="n">${sar(r.amtTsd)}</td><td class="txt">${r.correct}</td><td class="txt">${appCell}</td><td class="n">${ltr(r.kmRoad)}</td><td class="n">${sarD(r.amtRoad)}</td><td class="n">${sarD(r.diff)}</td><td class="n">${num(r.trips)}</td><td class="n crit-num">${sar(r.total)}</td></tr>`;
 }
 function renderTCostBody(q) {
   const body = $('#tcBody'); if (!body) return;
@@ -1005,14 +1007,15 @@ function tcostRows() {
     const approved = APPROVED[snoStr] || (/^أرامكو/.test(gnear) ? gnear : (/^أرامكو/.test(s.bench || '') ? s.bench : ''));
     for (const o of byO) {
       const t = o.trips || 1;
-      const diff = Math.round((o.waste || 0) / t);        // فرق الردة لهذا المركز
+      const diff = (o.waste || 0) / t;                    // فرق الردة الفعلي (بكسوره) — إجمالي الفرق ÷ الردود
+      const amtTsd = Math.round(o.rate || 0);
       out.push({
         sno: +snoStr, nm: s.nm || '',
         billedCenter: o.orgA || '', product: prod,
-        kmTsd: o.kmTrip || 0, amtTsd: Math.round(o.rate || 0),
+        kmTsd: o.kmTrip || 0, amtTsd,
         correct: s.bench || '', kmRoad: s.benchD != null ? s.benchD : '',
         approved, apprOfficial,   // المركز المعتمد من أرامكو (رسمي إن وُجد، وإلا تقديري = الأقرب)
-        amtRoad: Math.max(0, Math.round((o.rate || 0)) - diff),   // المفوتر − الفرق = مبلغ الطريق الصحيح
+        amtRoad: Math.max(0, amtTsd - diff),   // المفوتر − الفرق = مبلغ الطريق (متسق مع الفرق الدقيق)
         diff, trips: o.trips || 0, total: Math.round(o.waste || 0),
       });
     }
@@ -1023,7 +1026,8 @@ function tcostRows() {
 const TCOST_MIN_DIFF = 110;   // حد أدنى لفرق المبلغ للردة في مقارنة تكلفة النقل
 function exportTCost() {
   const head = ['SER', '(DESTINATION) المحطة', 'ARAMCO', 'PRODUCT', 'AVG KM (TSD)', 'AVG AMOUNT (TSD)', 'THE CORRECT ARAMCO', 'المركز المعتمد (أرامكو)', 'AVG KM (ROAD)', 'AVG AMOUNT (ROAD)', 'AVG DIFF AMOUNT', 'TRIPS', 'TOTAL AMOUNT DIFF', 'NOTES'];
-  const rows = tcostRows().map((r, i) => [i + 1, `"${r.sno} - ${r.nm}"`, `"${r.billedCenter}"`, `"${r.product}"`, r.kmTsd, r.amtTsd, `"${r.correct}"`, `"${r.approved}${r.approved && !r.apprOfficial ? ' (تقديري)' : ''}"`, r.kmRoad, r.amtRoad, r.diff, r.trips, r.total, r.approved && !r.apprOfficial ? 'المعتمد تقديري = أقرب مركز (لا رد أرامكو رسمي)' : '']);
+  const r3 = x => Math.round((Number(x) || 0) * 1000) / 1000;   // كسر دقيق حتى 3 خانات
+  const rows = tcostRows().map((r, i) => [i + 1, `"${r.sno} - ${r.nm}"`, `"${r.billedCenter}"`, `"${r.product}"`, r.kmTsd, r.amtTsd, `"${r.correct}"`, `"${r.approved}${r.approved && !r.apprOfficial ? ' (تقديري)' : ''}"`, r.kmRoad, r3(r.amtRoad), r3(r.diff), r.trips, r.total, r.approved && !r.apprOfficial ? 'المعتمد تقديري = أقرب مركز (لا رد أرامكو رسمي)' : '']);
   exportSheet(head, rows, `مقارنة_تكلفة_النقل_${AGG.period}.xlsx`);
 }
 /* قاموس التعريفات المركزي — يُستخدم مع infoDot('key') */
