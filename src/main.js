@@ -29,9 +29,9 @@ const sarD = (n, d = 3) => ltr(numD(n, d));                               // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.18';
+const APP_VERSION = '1.9.19';
 // بصمة بيانات المرجع/المحرّك — عند تغيّرها تُلغى الفترات المرفوعة المخزّنة (لأنها حُسبت بمسافات/منطق قديم)
-const DATA_VERSION = 'roads-v6.0_7+tol110';
+const DATA_VERSION = 'master-v21+qatif+tol110';
 
 /* ---------- حالة التطبيق ---------- */
 let PAGE = 'overview';
