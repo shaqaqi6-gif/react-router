@@ -26,10 +26,29 @@ const numD = (n, d = 3) => (Number(n) || 0).toLocaleString('en-US', { maximumFra
 const ltr = s => `<span class="ltr">${s}</span>`;                         // رقم باتجاه LTR
 const sar = n => ltr(num(n));                                             // مبلغ
 const sarD = (n, d = 3) => ltr(numD(n, d));                               // مبلغ بكسور دقيقة
+// مبلغ يعدّ تصاعدياً عند الظهور (يُحرَّك بـ runCountups)
+const sarC = (n, suf = '') => `<span class="ltr countup" data-to="${Math.round(Number(n) || 0)}"${suf ? ` data-suf="${suf}"` : ''}>${num(n)}${suf}</span>`;
+function runCountups(root) {
+  const host = root || document;
+  const reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const easeOut = x => 1 - Math.pow(1 - x, 3);
+  host.querySelectorAll('.countup[data-to]').forEach(el => {
+    if (el._counted) return; el._counted = 1;
+    const to = +el.dataset.to, suf = el.dataset.suf || '';
+    if (!isFinite(to) || reduce || to === 0) { el.textContent = num(to) + suf; return; }
+    const dur = Math.min(900, 380 + Math.log10(Math.max(10, to)) * 130), t0 = performance.now();
+    const step = now => {
+      const p = Math.min(1, (now - t0) / dur);
+      el.textContent = num(Math.round(to * easeOut(p))) + suf;
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  });
+}
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.20';
+const APP_VERSION = '1.9.21';
 // بصمة بيانات المرجع/المحرّك — عند تغيّرها تُلغى الفترات المرفوعة المخزّنة (لأنها حُسبت بمسافات/منطق قديم)
 const DATA_VERSION = 'master-v21+qatif+tol110';
 
@@ -74,6 +93,7 @@ function render(pg) {
   else if (pg === 'users')    { c.innerHTML = viewUsers();    wireUsers(); }
   // انتقال ظهور لطيف عند كل تنقّل
   c.classList.remove('page-in'); void c.offsetWidth; c.classList.add('page-in');
+  runCountups(c);   // عدّ تصاعدي للأرقام (لوحة التحكم)
 }
 
 /* ---------- عناصر رسومية مشتركة ---------- */
@@ -120,12 +140,12 @@ function viewOverview() {
       <div class="hero-flex">
         <div class="h-main">
           <div class="eyebrow">الفعلي مقابل الواجب · ${a.period}</div>
-          <div class="num">${sar(a.waste)} <small>ر.س هدر</small></div>
+          <div class="num">${sarC(a.waste)} <small>ر.س هدر</small></div>
           <div class="sub">الفعلي ${sar(a.actual)} − الواجب من الأقرب ${sar(a.should)} = هدر ${a.wastePct}% من قيمة النقل القابلة للقياس${a.tolPerTrip ? ` · تفاوت مسموح &lt; ${a.tolPerTrip} ر.س/ردة (مُعفى ${sar(a.forgiven || 0)})` : ''}</div>
         </div>
-        <div class="h-stat"><div class="v">${sar(a.total)}</div><div class="l">عدد الردود المدققة</div></div>
-        <div class="h-stat"><div class="v warn">${sar(a.alert)}</div><div class="l">ردود بتنبيه</div></div>
-        <div class="h-stat"><div class="v good">${a.compliance}%</div><div class="l">الالتزام بأقرب مركز ${infoDot('الالتزام')}</div></div>
+        <div class="h-stat"><div class="v">${sarC(a.total)}</div><div class="l">عدد الردود المدققة</div></div>
+        <div class="h-stat"><div class="v warn">${sarC(a.alert)}</div><div class="l">ردود بتنبيه</div></div>
+        <div class="h-stat"><div class="v good">${sarC(a.compliance, '%')}</div><div class="l">الالتزام بأقرب مركز ${infoDot('الالتزام')}</div></div>
       </div>
       <div class="costgap">
         <div class="cg-track">
@@ -136,14 +156,14 @@ function viewOverview() {
       </div>
     </div>`;
   const kpis = kpiRow([
-    { ic: '💰', v: sar(a.actual), l: 'التكلفة الفعلية (ر.س)' },
-    { ic: '🎯', v: sar(a.should), l: 'التكلفة الواجبة من الأقرب (ر.س) ' + infoDot('التكلفة الواجبة'), cls: 'ok' },
-    { ic: '📉', v: sar(a.waste),  l: 'الهدر القابل للتوفير (ر.س) ' + infoDot('الهدر'), cls: 'crit', tag: a.wastePct + '%', tagBg: 'var(--crit-bg)', tagFg: 'var(--crit)' },
-    { ic: '🚨', v: sar(a.alert),  l: 'ردود بتنبيه (تجاوز شريحة)', cls: 'warn' },
-    { ic: '✅', v: sar(a.ok),     l: 'ردود سليمة (لا تجاوز)', cls: 'ok' },
-    { ic: '🧾', v: sar(a.pover),  l: 'تجاوزات سعرية عن الجدول ' + infoDot('التجاوز السعري'), cls: a.pover ? 'crit' : 'ok' },
-    { ic: '📍', v: sar(a.proxy_stations), l: 'محطات تحتاج إضافة للمرجع ' + infoDot('المحطات الناقصة'), cls: 'warn' },
-    { ic: '🏢', v: sar(a.stations), l: 'المحطات المخدومة' },
+    { ic: '💰', v: sarC(a.actual), l: 'التكلفة الفعلية (ر.س)' },
+    { ic: '🎯', v: sarC(a.should), l: 'التكلفة الواجبة من الأقرب (ر.س) ' + infoDot('التكلفة الواجبة'), cls: 'ok' },
+    { ic: '📉', v: sarC(a.waste),  l: 'الهدر القابل للتوفير (ر.س) ' + infoDot('الهدر'), cls: 'crit', tag: a.wastePct + '%', tagBg: 'var(--crit-bg)', tagFg: 'var(--crit)' },
+    { ic: '🚨', v: sarC(a.alert),  l: 'ردود بتنبيه (تجاوز شريحة)', cls: 'warn' },
+    { ic: '✅', v: sarC(a.ok),     l: 'ردود سليمة (لا تجاوز)', cls: 'ok' },
+    { ic: '🧾', v: sarC(a.pover),  l: 'تجاوزات سعرية عن الجدول ' + infoDot('التجاوز السعري'), cls: a.pover ? 'crit' : 'ok' },
+    { ic: '📍', v: sarC(a.proxy_stations), l: 'محطات تحتاج إضافة للمرجع ' + infoDot('المحطات الناقصة'), cls: 'warn' },
+    { ic: '🏢', v: sarC(a.stations), l: 'المحطات المخدومة' },
   ]);
   const segs = [
     { n: 'سليم', v: a.ok, c: '#15a075' },

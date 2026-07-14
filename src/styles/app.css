@@ -402,6 +402,16 @@ img,svg,canvas{max-width:100%}
 .content.page-in .kpis>.kpi:nth-child(7){animation-delay:.34s}
 .content.page-in .kpis>.kpi:nth-child(8){animation-delay:.39s}
 
+/* نمو أشرطة الرسوم البيانية عند الظهور */
+@keyframes barGrow{from{opacity:.2;transform:scaleX(.25)}to{opacity:1;transform:scaleX(1)}}
+.content.page-in .barrow .fill{transform-origin:right center;animation:barGrow .55s var(--ease-out) both}
+/* كشف شريط الفعلي/الواجب (يمسح من اليمين لليسار) */
+@keyframes gapReveal{from{clip-path:inset(0 0 0 100%)}to{clip-path:inset(0 0 0 0)}}
+.content.page-in .cg-track{animation:gapReveal .7s .1s var(--ease-out) both}
+/* ظهور الدونات بتكبير خفيف */
+@keyframes donutIn{from{opacity:0;transform:scale(.9)}to{opacity:1;transform:none}}
+.content.page-in .donut svg,.content.page-in svg.donut{animation:donutIn .5s .06s var(--ease-out) both}
+
 /* احترام تقليل الحركة: نُبقي الشفافية ونلغي الإزاحة والتحجيم */
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.08s!important}
