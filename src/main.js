@@ -29,7 +29,7 @@ const sarD = (n, d = 3) => ltr(numD(n, d));                               // م�
 const pct = (a, b) => b ? Math.round(100 * a / b) : 0;
 
 /* ---------- رقم الإصدار ---------- */
-const APP_VERSION = '1.9.19';
+const APP_VERSION = '1.9.20';
 // بصمة بيانات المرجع/المحرّك — عند تغيّرها تُلغى الفترات المرفوعة المخزّنة (لأنها حُسبت بمسافات/منطق قديم)
 const DATA_VERSION = 'master-v21+qatif+tol110';
 

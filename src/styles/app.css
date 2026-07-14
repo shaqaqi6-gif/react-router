@@ -9,6 +9,10 @@
   --r:14px;--r-lg:20px;--sbw:252px;
   --sh-sm:0 1px 2px rgba(10,42,61,.05),0 2px 8px rgba(10,42,61,.05);
   --sh:0 6px 24px rgba(10,42,61,.08);--sh-lg:0 24px 64px rgba(10,42,61,.2);
+  /* منحنيات حركة قوية (Emil Kowalski) — أوضح من الافتراضية */
+  --ease-out:cubic-bezier(.23,1,.32,1);        /* دخول/خروج سريع الاستجابة */
+  --ease-in-out:cubic-bezier(.77,0,.175,1);    /* حركة على الشاشة */
+  --ease-spring:cubic-bezier(.34,1.56,.64,1);  /* ارتداد خفيف */
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;background:var(--bg);color:var(--ink);font-family:var(--body);line-height:1.55;-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;text-rendering:optimizeLegibility;font-feature-settings:"kern" 1,"liga" 1}
@@ -360,21 +364,50 @@ img,svg,canvas{max-width:100%}
 .sb-ver{margin-top:10px;font-size:10px;color:rgba(255,255,255,.32);letter-spacing:.4px;font-family:var(--disp)}
 .sb-ver span{color:rgba(255,255,255,.55);font-weight:700}
 
-/* تفاعلات الأزرار والبطاقات */
-.btn{transition:background .18s,box-shadow .18s,transform .12s}
-.btn:active{transform:translateY(1px)}
+/* ===== طبقة صقل الحركة (وفق مبادئ Emil Kowalski) — لوحة احترافية: سريعة ومقتضبة ===== */
+/* ضغط الأزرار: scale محسوس فوري بدل الإزاحة */
+.btn,a.btn{transition:background .18s var(--ease-out),box-shadow .18s var(--ease-out),transform .13s var(--ease-out),filter .18s var(--ease-out)}
+.btn:active,a.btn:active{transform:scale(.97)}
 .btn.up:hover{box-shadow:0 6px 18px rgba(18,153,110,.32)}
-.card{transition:box-shadow .22s,transform .22s,border-color .22s}
-.kpi{transition:box-shadow .22s,transform .22s}
-.kpi:hover{transform:translateY(-2px);box-shadow:var(--sh)}
-.rowlink{cursor:pointer;transition:background .15s}
-.atab{transition:background .18s,color .18s,border-color .18s,box-shadow .18s,transform .12s}
-.atab:active{transform:translateY(1px)}
+/* البطاقات والمؤشرات: منحنى أقوى */
+.card{transition:box-shadow .22s var(--ease-out),transform .22s var(--ease-out),border-color .18s var(--ease-out)}
+.kpi{transition:box-shadow .22s var(--ease-out),transform .2s var(--ease-out)}
+.rowlink{cursor:pointer;transition:background .14s var(--ease-out)}
+.atab{transition:background .18s var(--ease-out),color .18s var(--ease-out),border-color .18s var(--ease-out),box-shadow .18s var(--ease-out),transform .13s var(--ease-out)}
+.atab:active{transform:scale(.97)}
+/* رفع البطاقات عند التمرير — فقط على الأجهزة ذات مؤشر دقيق (تفادي لمس الجوال) */
+@media (hover:hover) and (pointer:fine){
+  .kpi:hover{transform:translateY(-2px);box-shadow:var(--sh)}
+  .card.lift:hover{transform:translateY(-2px);box-shadow:var(--sh)}
+}
+/* منحنيات أقوى لعناصر موجودة */
+.map-res{transition:border-color .14s var(--ease-out),background .14s var(--ease-out),box-shadow .14s var(--ease-out),transform .13s var(--ease-out)}
+.map-res:active{transform:scale(.985)}
+.info-dot{transition:background .15s var(--ease-out),transform .15s var(--ease-out)}
+.info-dot:active{transform:scale(.9)}
+.modal-hd .x{transition:background .15s var(--ease-out),transform .2s var(--ease-out)}
+#infoPop{transition:opacity .2s var(--ease-out),transform .2s var(--ease-out)}
 
-/* انتقال ظهور المحتوى عند التنقل */
-@keyframes pageIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
-.content.page-in{animation:pageIn .32s cubic-bezier(.22,.61,.36,1)}
-@media (prefers-reduced-motion:reduce){.content.page-in{animation:none}}
+/* انتقال ظهور المحتوى عند التنقّل + تتابع البطاقات (stagger) */
+@keyframes pageIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
+.content.page-in{animation:pageIn .34s var(--ease-out) both}
+@keyframes cardRise{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+.content.page-in .kpis>.kpi{animation:cardRise .4s var(--ease-out) both}
+.content.page-in .kpis>.kpi:nth-child(1){animation-delay:.04s}
+.content.page-in .kpis>.kpi:nth-child(2){animation-delay:.09s}
+.content.page-in .kpis>.kpi:nth-child(3){animation-delay:.14s}
+.content.page-in .kpis>.kpi:nth-child(4){animation-delay:.19s}
+.content.page-in .kpis>.kpi:nth-child(5){animation-delay:.24s}
+.content.page-in .kpis>.kpi:nth-child(6){animation-delay:.29s}
+.content.page-in .kpis>.kpi:nth-child(7){animation-delay:.34s}
+.content.page-in .kpis>.kpi:nth-child(8){animation-delay:.39s}
+
+/* احترام تقليل الحركة: نُبقي الشفافية ونلغي الإزاحة والتحجيم */
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.08s!important}
+  .content.page-in,.content.page-in .kpis>.kpi{animation:none}
+  .kpi:hover,.card.lift:hover{transform:none}
+}
 
 /* ===== صفحة خطة العمل حسب الفترات ===== */
 .plan-wrap{display:flex;flex-direction:column;gap:16px}
