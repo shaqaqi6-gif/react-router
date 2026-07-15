@@ -54,6 +54,8 @@ body{font-family:var(--body);background:var(--bg);color:var(--ink);line-height:1
 .btn:active{transform:scale(.97)}
 .btn.g{background:linear-gradient(135deg,#0f7a4d,#12a05f);color:#fff;border-color:transparent}
 .btn.g:hover{filter:brightness(1.06);color:#fff}
+.btn.wa{background:linear-gradient(135deg,#25D366,#128C7E);color:#fff;border-color:transparent}
+.btn.wa:hover{filter:brightness(1.06);color:#fff}
 .mapwrap{position:relative;min-height:520px}
 #map{width:100%;height:100%;min-height:520px;border-radius:var(--r)}
 .empty{text-align:center;color:var(--muted);padding:40px 16px;font-size:13.5px}
@@ -156,9 +158,10 @@ function render(list, note, withDist){
       +'<div class="c-meta"><span class="pill">📍 '+(s.c||'—')+'</span><span class="pill">'+(s.r||'')+'</span>'+(withDist&&s._d!=null?'<span class="pill">⇐ '+Math.round(s._d)+' كم</span>':'')+'</div>'
       +'<div class="c-near"><span class="tag near">أقرب مركز</span> أرامكو '+s.nr+' · '+s.nk+'كم'+(s.ap&&s.ap!==s.nr?' <span class="tag appr">معتمد: '+s.ap+'</span>':'')+'</div>'
       +'<div class="c-addr" data-addr="'+s.s+'"></div>'
-      +'<div class="c-btns"><button class="btn" data-act="copy">📋 نسخ الرد</button>'
+      +'<div class="c-btns"><button class="btn wa" data-act="wa">📱 واتساب</button>'
+      +'<button class="btn" data-act="copy">📋 نسخ الرد</button>'
       +'<a class="btn g" target="_blank" rel="noopener" href="https://www.google.com/maps/search/?api=1&query='+s.la+','+s.lo+'">🗺️ قوقل</a></div>';
-    c.onclick=e=>{ if(e.target.closest('a'))return; if(e.target.dataset.act==='copy'){e.stopPropagation();copyReply(s);return;} select(s,c); };
+    c.onclick=e=>{ if(e.target.closest('a'))return; if(e.target.dataset.act==='wa'){e.stopPropagation();waSend(s);return;} if(e.target.dataset.act==='copy'){e.stopPropagation();copyReply(s);return;} select(s,c); };
     r.appendChild(c);
   });
   drawStations(shown);
@@ -196,16 +199,25 @@ async function geocode(s){
     geoCache[s.s]=addr; if(box)box.textContent='📌 '+addr; return addr;
   }catch(e){ if(box)box.textContent='📌 تعذّر جلب العنوان'; return ''; }
 }
+function buildReply(s, addr){
+  const NL=String.fromCharCode(10);
+  return ['📍 محطة الدريس رقم '+s.s+' — '+s.n,
+    'المدينة: '+s.c+(s.r?' | المنطقة: '+s.r:''),
+    ...(addr?['الحي/الشارع: '+addr]:[]),
+    'الإحداثيات: '+s.la+', '+s.lo,
+    'الموقع على الخريطة: https://www.google.com/maps/search/?api=1&query='+s.la+','+s.lo,
+    'أقرب مركز أرامكو: '+s.nr+' ('+s.nk+' كم)'+(s.ap&&s.ap!==s.nr?' | المركز المعتمد: '+s.ap:'')
+  ].join(NL);
+}
 async function copyReply(s){
   const addr=await geocode(s);
-  const t='محطة الدريس رقم '+s.s+' — '+s.n+'\\n'
-    +'المدينة: '+s.c+' | المنطقة: '+s.r+'\\n'
-    +(addr?'الحي/الشارع: '+addr+'\\n':'')
-    +'الإحداثيات: '+s.la+', '+s.lo+'\\n'
-    +'الموقع: https://www.google.com/maps/search/?api=1&query='+s.la+','+s.lo+'\\n'
-    +'أقرب مركز أرامكو: '+s.nr+' ('+s.nk+' كم)'+(s.ap&&s.ap!==s.nr?' | المركز المعتمد: '+s.ap:'');
-  try{ await navigator.clipboard.writeText(t); toast('✅ نُسخ رد المحطة '+s.s); }
+  try{ await navigator.clipboard.writeText(buildReply(s,addr)); toast('✅ نُسخ رد المحطة '+s.s); }
   catch(e){ toast('تعذّر النسخ'); }
+}
+function waSend(s){
+  // نفتح واتساب مباشرةً بالرد الجاهز (يختار المستخدم المستلِم)
+  window.open('https://wa.me/?text='+encodeURIComponent(buildReply(s, geoCache[s.s]||'')), '_blank');
+  geocode(s);   // يجلب الحي/الشارع للنسخة التالية
 }
 $('#q').addEventListener('input',()=>{clearTimeout(window._st);window._st=setTimeout(search,220);});
 $('#chips').addEventListener('click',e=>{const b=e.target.closest('.chip');if(!b)return;mode=b.dataset.m;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c===b));$('#q').placeholder=mode==='loc'?'اكتب حياً أو شارعاً أو عنواناً…':mode==='no'?'رقم المحطة…':mode==='center'?'اسم أقرب مركز…':'اكتب للبحث…';search();});
