@@ -135,7 +135,7 @@ const _engineExports = {};
         const bands = Math.max(0, bb - nb);
         if (bands > 0) s.alerts += nt;
         s.maxBands = Math.max(s.maxBands, bands);
-        accOrigin(s, origin, orgA, km, roadTo(sno, orgA), billedRate, nt, w, bands, prod, amt, false);
+        accOrigin(s, origin, orgA, km, roadTo(sno, orgA), billedRate, nt, w, bands, prod, amt, false, wt);
         AGG._proxyStations[sno] = s;
         continue;
       }
@@ -159,7 +159,7 @@ const _engineExports = {};
       if (pover && AGG.priceOver.length < 200)
         AGG.priceOver.push({ sno, nm: s.nm, org: orgA, km: Math.round(km), tier: cap, rate: Math.round(amt / nt), exp: Math.round(billedRate), diff: Math.round(amt / nt - billedRate) });
 
-      accOrigin(s, origin, orgA, km, roadTo(sno, orgA), billedRate, nt, w, bands, prod, amt, pover);
+      accOrigin(s, origin, orgA, km, roadTo(sno, orgA), billedRate, nt, w, bands, prod, amt, pover, wt);
 
       // مجاميع
       const ob = AGG.byOrigin[orgA] || (AGG.byOrigin[orgA] = { trips: 0, alerts: 0, amt: 0, waste: 0, rate: 0, _rsum: 0, _rn: 0 });
@@ -170,12 +170,12 @@ const _engineExports = {};
       pb.trips += nt; pb.amt += amt; pb._rsum += amt; pb._rn += nt;
     }
 
-    function accOrigin(s, origin, orgA, km, kmRoad, rate, nt, w, bands, prod, amt, pover) {
+    function accOrigin(s, origin, orgA, km, kmRoad, rate, nt, w, bands, prod, amt, pover, wt) {
       s.centersSet[orgA] = 1;
       const o = s._byO[orgA] || (s._byO[orgA] = { org: origin, orgA, trips: 0, _kmSum: 0, _rsum: 0, kmRoad: kmRoad != null ? Math.round(kmRoad) : null, bands: 0, waste: 0, pover: false });
       o.trips += nt; o._kmSum += km * nt; o._rsum += amt; o.waste += w; o.bands = Math.max(o.bands, bands); if (pover) o.pover = true;
-      const p = s._byP[prod] || (s._byP[prod] = { prod, trips: 0, amt: 0, _rsum: 0 });
-      p.trips += nt; p.amt += amt; p._rsum += amt;
+      const p = s._byP[prod] || (s._byP[prod] = { prod, trips: 0, amt: 0, _rsum: 0, _wtSum: 0 });
+      p.trips += nt; p.amt += amt; p._rsum += amt; p._wtSum += (wt || 0) * nt;
     }
 
     // إنهاء البنية
@@ -188,7 +188,7 @@ const _engineExports = {};
         org: o.org, orgA: o.orgA, trips: o.trips, rate: Math.round(o._rsum / o.trips),
         kmTrip: Math.round(o._kmSum / o.trips), kmRoad: o.kmRoad, bands: o.bands, waste: Math.round(o.waste), pover: o.pover,
       })).sort((a, b) => b.waste - a.waste);
-      const byP = Object.values(s._byP).map(p => ({ prod: p.prod, trips: p.trips, amt: Math.round(p.amt), rate: Math.round(p._rsum / p.trips) }))
+      const byP = Object.values(s._byP).map(p => ({ prod: p.prod, trips: p.trips, amt: Math.round(p.amt), rate: Math.round(p._rsum / p.trips), avgLoad: p.trips ? Math.round(p._wtSum / p.trips) : 0 }))
         .sort((a, b) => b.trips - a.trips);
       STATIONS[sno] = {
         nm: s.nm, city: s.city, reg: s.reg, primstr: s.primstr, cov: s.cov,

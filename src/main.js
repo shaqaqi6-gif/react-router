@@ -39,6 +39,7 @@ const META = {
   compliance: { t: 'التوزيع والالتزام',  s: 'تصنيف المحطات وتوزيع تجاوز الشرائح' },
   quality:    { t: 'جودة البيانات',      s: 'محطات ناقصة وتجاوزات سعرية وأخطاء مسافات' },
   audit:      { t: 'مركز التدقيق المحاسبي', s: 'تقرير رسمي · أسباب الهدر · توصيات المعالجة · كشف الشذوذ · المقارنة الشهرية' },
+  check:      { t: 'تدقيق المعلمات', s: 'مطابقة كل معلمة مقابل المفروض — المسافة للأقرب، الكيلومتر، الحمولة — بنتيجة صح/غلط' },
   plan:       { t: 'خطة العمل حسب الفترات', s: 'خارطة طريق تنفيذية مرحلية لمعالجة الهدر — بأثر مالي مُقدّر لكل فترة' },
 };
 
@@ -63,6 +64,7 @@ function render(pg) {
   else if (pg === 'compliance') c.innerHTML = viewCompliance();
   else if (pg === 'quality')  { c.innerHTML = viewQuality();  wireQuality(); }
   else if (pg === 'audit')    { c.innerHTML = viewAudit();    wireAudit(); }
+  else if (pg === 'check')    { c.innerHTML = viewCheck();    wireCheck(); }
   else if (pg === 'plan')     { c.innerHTML = viewPlan();     wirePlan(); }
 }
 
@@ -683,6 +685,7 @@ const GLOSSARY = {
   'تصحيح السيل': 'محطات الطائف يُمنع وصولها عبر طريق الهدا (ممنوع على القاطرات)، فالمسار الإجباري عبر <b>السيل</b> أطول. يُصحّح المرجع تلقائياً لطريق السيل لتفادي تنبيهات هدر كاذبة.',
   'التجاوز السعري': 'حالة فُوتِرت بأجر <b>أعلى</b> من سعر جدول الشريحة لكيلومتراتها — قابلة للمطالبة بالفرق من المورّد.',
   'الدمج': 'توحيد عدة ردود صغيرة لنفس المحطة والمنتج في ناقلات كبيرة أقل عدداً وأرخص للّتر — ضمن سعة خزان المحطة. فرصة توفير تحتاج تأكيد جدولة التوريد.',
+  'العتبات': 'حدود الحكم بـ«صح/غلط» على كل معلمة:<br><br>• <b>المسافة:</b> «غلط» إذا وُرّدت المحطة من مركز أبعد من الأقرب (تجاوز شريحة).<br>• <b>الكيلومتر:</b> «غلط» إذا زاد المفوتر عن مسافة الطريق المعتمدة بأكثر من <b>٤٠ كم</b>.<br>• <b>الحمولة:</b> «غلط» إذا كان امتلاء الناقلة أقل من <b>٨٠٪</b> من سعة خزان المنتج (فرصة دمج).<br><br>«غ/م» = غير مقيس (بيانات مرجعية ناقصة). العتبات قابلة للضبط.',
 };
 function infoDot(key, htmlOverride) {
   const html = htmlOverride || GLOSSARY[key] || '';
@@ -734,6 +737,190 @@ function exportAuditReport() {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   a.download = `تقرير_التدقيق_${AGG.period}.csv`; a.click();
+}
+
+/* ============================================================
+   تدقيق المعلمات — مطابقة الفعلي مقابل المفروض (صح/غلط)
+   ثلاث معلمات لكل محطة:
+     ١) المسافة للأقرب: هل وُرّدت من أقرب مركز؟
+     ٢) الكيلومتر: المفوتر مقابل مسافة الطريق المعتمدة.
+     ٣) الحمولة: امتلاء الناقلة مقابل سعة خزان المنتج (المفروض).
+   العتبات قابلة للضبط من الكائن CHK أدناه.
+   ============================================================ */
+const CHK = { kmTol: 40, utilMin: 80 };   // فرق الكم المسموح (كم) · حدّ الامتلاء الأدنى (%)
+const PRODAR = { PETROL_91: 'بنزين ٩١', PETROL_95: 'بنزين ٩٥', DIESEL: 'ديزل', KEROSENE: 'كيروسين' };
+let CHECK = null, chkFilt = { q: '', scope: 'flagged' };
+
+function loadInfoFor(sno) {
+  const top = (AGG.loadEff && AGG.loadEff.top) || [];
+  return top.filter(t => +t.sno === +sno);
+}
+function checkAnalyze() {
+  const rows = [];
+  for (const [sno, s] of Object.entries(STATIONS)) {
+    if (s.cov === 'excluded') continue;   // نجران مستثناة
+    const byO = s.byO || [];
+
+    // ١) المسافة للأقرب
+    let dist;
+    if (s.cov === 'proxy') {
+      dist = { st: 'na', actual: 'غير مدرجة بالمرجع', should: `أقل مسافة محققة ${ltr(s.benchD)}كم`, note: 'تحتاج إضافة للمرجع أولاً' };
+    } else {
+      const bad = byO.filter(o => o.bands > 0).sort((a, b) => b.bands - a.bands)[0];
+      if (bad) dist = { st: 'bad', actual: `${bad.orgA} · ${ltr(bad.kmRoad != null ? bad.kmRoad : '—')}كم (+${bad.bands} شريحة)`, should: `${s.bench} · ${ltr(s.benchD)}كم`, note: 'وُرّدت من مركز أبعد من الأقرب' };
+      else dist = { st: 'ok', actual: `${s.bench} · ${ltr(s.benchD)}كم`, should: `${s.bench} · ${ltr(s.benchD)}كم`, note: 'التوريد من الأقرب ✓' };
+    }
+
+    // ٢) الكيلومتر: المفوتر مقابل الطريق
+    let km;
+    const measurable = byO.filter(o => o.kmRoad != null);
+    if (!measurable.length) km = { st: 'na', actual: '—', should: '—', note: 'لا مسافة طريق مرجعية' };
+    else {
+      let worst = measurable[0], worstGap = -1e9;
+      for (const o of measurable) { const g = o.kmTrip - o.kmRoad; if (g > worstGap) { worstGap = g; worst = o; } }
+      if (worstGap > CHK.kmTol) km = { st: 'bad', actual: `${ltr(worst.kmTrip)}كم مفوتر`, should: `${ltr(worst.kmRoad)}كم طريق (${worst.orgA})`, note: `المفوتر يزيد ${ltr(Math.round(worstGap))}كم عن الطريق` };
+      else km = { st: 'ok', actual: `${ltr(worst.kmTrip)}كم مفوتر`, should: `${ltr(worst.kmRoad)}كم طريق`, note: 'مطابق لمسافة الطريق ✓' };
+    }
+
+    // ٣) الحمولة: الامتلاء مقابل سعة الخزان
+    let load;
+    const li = loadInfoFor(sno);
+    if (li.length) {
+      const worst = li.slice().sort((a, b) => a.util - b.util)[0];
+      if (worst.util < CHK.utilMin) load = { st: 'bad', actual: `${num(worst.avgLoad)} لتر/ردة (${worst.util}% امتلاء)`, should: `${num(worst.ideal)} لتر · ${PRODAR[worst.prod] || worst.prod}`, note: `${worst.tankKnown ? 'سعة الخزان ' + num(worst.tankCap) + ' لتر — ' : ''}حمولة ناقصة قابلة للدمج` };
+      else load = { st: 'ok', actual: `${num(worst.avgLoad)} لتر/ردة (${worst.util}%)`, should: `${num(worst.ideal)} لتر`, note: 'امتلاء كافٍ ✓' };
+    } else {
+      load = { st: 'ok', actual: 'ضمن الحد', should: 'سعة خزان المنتج', note: 'لا حمولة ناقصة مرصودة ✓' };
+    }
+
+    const fails = [dist, km, load].filter(c => c.st === 'bad').length;
+    rows.push({ sno: +sno, nm: s.nm, city: s.city, cov: s.cov, tier: s.tier, waste: s.waste, dist, km, load, fails });
+  }
+  const badOf = k => rows.filter(r => r[k].st === 'bad').length;
+  const appOf = k => rows.filter(r => r[k].st !== 'na').length;
+  const summary = {
+    total: rows.length,
+    dist: { bad: badOf('dist'), ok: appOf('dist') - badOf('dist'), na: rows.length - appOf('dist') },
+    km:   { bad: badOf('km'),   ok: appOf('km')   - badOf('km'),   na: rows.length - appOf('km') },
+    load: { bad: badOf('load'), ok: appOf('load') - badOf('load'), na: rows.length - appOf('load') },
+    clean: rows.filter(r => r.fails === 0).length,
+    flagged: rows.filter(r => r.fails > 0).length,
+  };
+  rows.sort((a, b) => b.fails - a.fails || b.waste - a.waste);
+  return { rows, summary };
+}
+function chkFlaggedCount() { try { return checkAnalyze().summary.flagged; } catch (e) { return 0; } }
+function chkCard(ico, label, o, rate) {
+  const cls = rate >= 95 ? 'ok' : rate >= 80 ? 'warn' : 'crit';
+  return `<div class="chk-card">
+    <div class="cc-ico">${ico}</div>
+    <div class="cc-body">
+      <div class="cc-l">${label}</div>
+      <div class="cc-rate ${cls}">${rate}% <small>مطابقة</small></div>
+      <div class="cc-brk"><span class="g">✓ ${num(o.ok)} صح</span><span class="b">✗ ${num(o.bad)} غلط</span>${o.na ? `<span class="n">— ${num(o.na)} غ/م</span>` : ''}</div>
+    </div>
+  </div>`;
+}
+function verdictPill(c) {
+  if (c.st === 'ok') return '<span class="chk-pill v-ok">✓ صح</span>';
+  if (c.st === 'bad') return '<span class="chk-pill v-bad">✗ غلط</span>';
+  return '<span class="chk-pill v-na">— غ/م</span>';
+}
+function viewCheck() {
+  CHECK = checkAnalyze();
+  const S = CHECK.summary;
+  const rate = o => { const app = o.ok + o.bad; return app ? Math.round(100 * o.ok / app) : 100; };
+  const cards = `<div class="chk-cards">
+    ${chkCard('📍', 'المسافة للأقرب', S.dist, rate(S.dist))}
+    ${chkCard('📏', 'الكيلومتر المفوتر', S.km, rate(S.km))}
+    ${chkCard('⛽', 'حمولة الردة', S.load, rate(S.load))}
+  </div>`;
+  return `<div class="check-page">
+    ${cards}
+    <div class="chk-legend">
+      <span><b>${num(S.clean)}</b> محطة سليمة تماماً</span>
+      <span class="sep">·</span>
+      <span><b class="crit-num">${num(S.flagged)}</b> محطة عليها ملاحظة</span>
+      <span class="sep">·</span>
+      <span class="chk-thr">العتبات: الكيلومتر فرق ≤ ${ltr(CHK.kmTol)}كم · الامتلاء ≥ ${ltr(CHK.utilMin)}٪ ${infoDot('العتبات')}</span>
+    </div>
+    <div class="toolbar">
+      <input id="chkq" placeholder="ابحث باسم المحطة / رقمها / المدينة…">
+      <select id="chkscope">
+        <option value="flagged">عليها ملاحظة</option>
+        <option value="all">كل المحطات</option>
+        <option value="clean">سليمة تماماً</option>
+        <option value="dist">غلط: المسافة</option>
+        <option value="km">غلط: الكيلومتر</option>
+        <option value="load">غلط: الحمولة</option>
+      </select>
+      <button class="btn" id="chkexp">⤓ تصدير</button><span class="note" id="chkCnt"></span>
+    </div>
+    <p class="hint">كل صف = محطة، وكل معلمة تُقارَن بالمفروض بنتيجة <b>صح/غلط</b>. اضغط أي صف لعرض «الفعلي مقابل المفروض».</p>
+    <div class="tbl-wrap"><table class="t"><thead><tr>
+      <th class="txt">المحطة</th>
+      <th class="n">المسافة للأقرب</th>
+      <th class="n">الكيلومتر</th>
+      <th class="n">الحمولة</th>
+      <th class="n">النتيجة</th>
+    </tr></thead><tbody id="chkBody"></tbody></table></div>
+  </div>`;
+}
+function checkRows() {
+  let v = CHECK.rows;
+  const sc = chkFilt.scope;
+  if (sc === 'flagged') v = v.filter(r => r.fails > 0);
+  else if (sc === 'clean') v = v.filter(r => r.fails === 0);
+  else if (sc === 'dist') v = v.filter(r => r.dist.st === 'bad');
+  else if (sc === 'km') v = v.filter(r => r.km.st === 'bad');
+  else if (sc === 'load') v = v.filter(r => r.load.st === 'bad');
+  if (chkFilt.q) { const q = chkFilt.q.trim().toLowerCase(); v = v.filter(r => (r.nm + ' ' + r.sno + ' ' + r.city).toLowerCase().includes(q)); }
+  return v;
+}
+function chkDetail(r) {
+  const line = (ico, lbl, c) => `<div class="cd-line ${c.st}">
+    <span class="cd-lbl">${ico} ${lbl} ${verdictPill(c)}</span>
+    <span class="cd-a">الفعلي: <b>${c.actual}</b></span>
+    <span class="cd-s">المفروض: <b>${c.should}</b></span>
+    <span class="cd-n">${c.note}</span></div>`;
+  return `<tr class="chk-detail" data-for="${r.sno}" hidden><td colspan="5"><div class="cd-wrap">
+    ${line('📍', 'المسافة للأقرب', r.dist)}
+    ${line('📏', 'الكيلومتر', r.km)}
+    ${line('⛽', 'الحمولة', r.load)}
+    <div class="cd-foot"><button class="btn ghost sm" data-open="${r.sno}">↗ عرض تفاصيل المحطة كاملة</button></div>
+  </div></td></tr>`;
+}
+function drawCheck() {
+  const v = checkRows();
+  $('#chkCnt').textContent = `${num(v.length)} محطة`;
+  $('#chkBody').innerHTML = v.slice(0, 400).map(r => `
+    <tr class="chk-row" data-sno="${r.sno}">
+      <td class="txt"><b>${r.sno}</b> · ${r.nm || '—'}<div class="sub2">${r.city || ''}${r.cov === 'proxy' ? ' · <span class="tag-taif">ناقصة</span>' : ''}</div></td>
+      <td class="n">${verdictPill(r.dist)}</td>
+      <td class="n">${verdictPill(r.km)}</td>
+      <td class="n">${verdictPill(r.load)}</td>
+      <td class="n">${r.fails === 0 ? '<span class="chk-pill v-ok">سليمة</span>' : `<span class="chk-pill v-bad">${r.fails} ملاحظة</span>`}</td>
+    </tr>${chkDetail(r)}`).join('') + (v.length > 400 ? `<tr><td colspan="5" class="more">… أول 400 من ${num(v.length)}. ضيّق البحث أو صدّر.</td></tr>` : '');
+  $$('#chkBody .chk-row').forEach(tr => tr.onclick = () => {
+    const d = $(`#chkBody .chk-detail[data-for="${tr.dataset.sno}"]`);
+    if (d) d.hidden = !d.hidden;
+  });
+  $$('#chkBody [data-open]').forEach(b => b.onclick = e => { e.stopPropagation(); openModal(+b.dataset.open); });
+}
+function wireCheck() {
+  drawCheck();
+  $('#chkq').oninput = e => { chkFilt.q = e.target.value; drawCheck(); };
+  $('#chkscope').onchange = e => { chkFilt.scope = e.target.value; drawCheck(); };
+  $('#chkexp').onclick = () => {
+    const v = checkRows();
+    const verd = c => c.st === 'ok' ? 'صح' : c.st === 'bad' ? 'غلط' : 'غير مقيس';
+    csv(['رقم المحطة', 'اسم المحطة', 'المدينة', 'المسافة', 'المسافة-الفعلي', 'المسافة-المفروض', 'الكيلومتر', 'الكم-الفعلي', 'الكم-المفروض', 'الحمولة', 'الحمولة-الفعلي', 'الحمولة-المفروض', 'عدد الملاحظات'],
+      v.map(r => [r.sno, `"${r.nm}"`, `"${r.city || ''}"`,
+        verd(r.dist), `"${r.dist.actual}"`, `"${r.dist.should}"`,
+        verd(r.km), `"${r.km.actual}"`, `"${r.km.should}"`,
+        verd(r.load), `"${r.load.actual}"`, `"${r.load.should}"`, r.fails]),
+      `تدقيق_المعلمات_${AGG.period}.csv`);
+  };
 }
 
 /* ============================================================
@@ -1021,6 +1208,7 @@ function applyAudit(res) {
   $('#sbPeriod').textContent = AGG.period;
   $('#nbAlerts').textContent = num((AGG.tiers['عالي'] || 0) + (AGG.tiers['متوسط'] || 0));
   $('#nbQual').textContent = num(AGG.proxy_stations);
+  $('#nbCheck').textContent = num(chkFlaggedCount());
   nav('overview');
 }
 function showProc(msg) { $('#proc').style.display = 'flex'; $('#procMsg').textContent = msg; }
@@ -1082,6 +1270,7 @@ function boot() {
   $('#sbPeriod').textContent = AGG.period;
   $('#nbAlerts').textContent = num((AGG.tiers['عالي'] || 0) + (AGG.tiers['متوسط'] || 0));
   $('#nbQual').textContent = num(AGG.proxy_stations);
+  $('#nbCheck').textContent = num(chkFlaggedCount());
   $$('.nav-item').forEach(b => b.onclick = () => nav(b.dataset.pg));
   // زر القائمة على الجوال + خلفية الإغلاق
   const sb = $('#sidebar');
