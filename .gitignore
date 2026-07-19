@@ -5,3 +5,6 @@ dist/
 .env
 .env.*
 npm-debug.log*
+
+# حِزم النشر المولّدة (لا تُرفع للمستودع)
+samples/netlify-deploy.zip
