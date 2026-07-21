@@ -1,0 +1,82 @@
+═══════════════════════════════════════════════════════════════
+  أداة استخراج خط الطول والعرض من روابط Google Maps — داخل Google Sheets
+  (تعمل من الجوال أو الكمبيوتر، بدون تثبيت أي برنامج)
+═══════════════════════════════════════════════════════════════
+
+لماذا هذه الأداة؟ روابط «maps.app.goo.gl» المختصرة لا تُظهر الإحداثي إلا بعد
+فتحها على الإنترنت. هذه الأداة تفتحها على خوادم Google وتستخرج الإحداثي تلقائيًا.
+
+─── الخطوات ───────────────────────────────────────────────────
+1) ارفع ملف المحطات إلى Google Sheets (Drive → New → Google Sheets → File → Import).
+2) من القائمة العلوية:  Extensions ‹ الإضافات ›  →  Apps Script.
+3) امسح أي كود موجود، والصق الكود بالأسفل كاملًا، ثم احفظ (أيقونة القرص).
+4) ارجع للجدول، وحدّث الصفحة، فيظهر قائمة جديدة اسمها «أدوات الإحداثيات».
+5) اضغط:  أدوات الإحداثيات  →  استخراج خط الطول والعرض.
+6) وافق على الصلاحية أول مرة (Allow)، وانتظر — يملأ عمودَي lat / lng تلقائيًا.
+
+ملاحظة: يفترض وجود عمود عنوانه يحتوي «الموقع الجغرافي». إن اختلف الاسم غيّره في الكود.
+═══════════════════════════════════════════════════════════════
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('أدوات الإحداثيات')
+    .addItem('استخراج خط الطول والعرض', 'استخراج_الاحداثيات')
+    .addToUi();
+}
+
+function استخراج_الاحداثيات() {
+  var sh = SpreadsheetApp.getActiveSheet();
+  var vals = sh.getDataRange().getValues();
+
+  // إيجاد صف العناوين وعمود الموقع الجغرافي
+  var hr = -1, gc = -1;
+  for (var i = 0; i < Math.min(vals.length, 6); i++) {
+    for (var j = 0; j < vals[i].length; j++) {
+      if (String(vals[i][j]).indexOf('الجغراف') >= 0) { hr = i; gc = j; break; }
+    }
+    if (gc >= 0) break;
+  }
+  if (gc < 0) { SpreadsheetApp.getUi().alert('لم أجد عمود «الموقع الجغرافي».'); return; }
+
+  var latCol = vals[hr].length + 1;   // أعمدة جديدة في النهاية
+  var lngCol = latCol + 1;
+  sh.getRange(hr + 1, latCol).setValue('خط العرض lat');
+  sh.getRange(hr + 1, lngCol).setValue('خط الطول lng');
+
+  var okCount = 0;
+  for (var r = hr + 1; r < vals.length; r++) {
+    var link = String(vals[r][gc] || '').trim();
+    if (!link) continue;
+    var c = resolveCoord_(link);
+    if (c) {
+      sh.getRange(r + 1, latCol).setValue(c[0]);
+      sh.getRange(r + 1, lngCol).setValue(c[1]);
+      okCount++;
+    } else {
+      sh.getRange(r + 1, latCol).setValue('تعذّر');
+    }
+    SpreadsheetApp.flush();
+    Utilities.sleep(150);
+  }
+  SpreadsheetApp.getUi().alert('تم. استُخرج ' + okCount + ' إحداثي.');
+}
+
+function resolveCoord_(link) {
+  var rx = [
+    /[?&]q=(-?\d+\.\d+),\s*(-?\d+\.\d+)/,
+    /@(-?\d+\.\d+),(-?\d+\.\d+)/,
+    /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/,
+    /"latitude"\s*:\s*(-?\d+\.\d+).*?"longitude"\s*:\s*(-?\d+\.\d+)/,
+    /^\s*(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)\s*$/
+  ];
+  var m, k;
+  for (k = 0; k < rx.length; k++) { m = link.match(rx[k]); if (m) return [parseFloat(m[1]), parseFloat(m[2])]; }
+  try {
+    var res = UrlFetchApp.fetch(link, { followRedirects: true, muteHttpExceptions: true });
+    var hdr = res.getAllHeaders();
+    var loc = hdr['Location'] || hdr['location'] || '';
+    var txt = loc + ' ' + res.getContentText();
+    for (k = 0; k < rx.length; k++) { m = txt.match(rx[k]); if (m) return [parseFloat(m[1]), parseFloat(m[2])]; }
+  } catch (e) {}
+  return null;
+}
