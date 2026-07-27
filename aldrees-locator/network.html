@@ -1,0 +1,580 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>شبكة سلاسل الإمداد — الدريس</title>
+<style>
+:root{
+  --ground:#0B1512; --stage:#0A1310; --panel:#101E19; --panel-2:#14241E;
+  --line:#22362F; --line-2:#1A2A24;
+  --ink:#EAF2EE; --ink-2:#A8BCB4; --ink-3:#6E837B;
+  --brand:#1FA8DE; --hub:#12B48F; --hub-ring:rgba(18,180,143,.16);
+  --fixed:#13B892; --temp:#E0A63C; --oper:#5E86A6; --store:#3E86E0; --maint:#E4566A;
+  --grid:rgba(120,150,140,.05);
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 18px 50px rgba(0,0,0,.55);
+  --f:"SF Arabic","Noto Kufi Arabic","Segoe UI","Noto Sans Arabic",Tahoma,system-ui,sans-serif;
+  --rail:352px;
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --ground:#E7ECE9; --stage:#EEF2F0; --panel:#FFFFFF; --panel-2:#F5F8F6;
+    --line:#DDE5E1; --line-2:#EAF0ED;
+    --ink:#122019; --ink-2:#40564D; --ink-3:#7A8E85;
+    --hub-ring:rgba(14,107,90,.12);
+    --grid:rgba(20,60,45,.05);
+    --shadow:0 1px 2px rgba(18,33,29,.06),0 16px 40px rgba(18,33,29,.12);
+  }
+}
+:root[data-theme="dark"]{
+  --ground:#0B1512; --stage:#0A1310; --panel:#101E19; --panel-2:#14241E;
+  --line:#22362F; --line-2:#1A2A24; --ink:#EAF2EE; --ink-2:#A8BCB4; --ink-3:#6E837B;
+  --hub-ring:rgba(18,180,143,.16); --grid:rgba(120,150,140,.05);
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 18px 50px rgba(0,0,0,.55);
+}
+:root[data-theme="light"]{
+  --ground:#E7ECE9; --stage:#EEF2F0; --panel:#FFFFFF; --panel-2:#F5F8F6;
+  --line:#DDE5E1; --line-2:#EAF0ED; --ink:#122019; --ink-2:#40564D; --ink-3:#7A8E85;
+  --hub-ring:rgba(14,107,90,.12); --grid:rgba(20,60,45,.05);
+  --shadow:0 1px 2px rgba(18,33,29,.06),0 16px 40px rgba(18,33,29,.12);
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  font-family:var(--f); background:var(--ground); color:var(--ink);
+  direction:rtl; overflow:hidden; -webkit-font-smoothing:antialiased;
+  display:grid; grid-template-rows:auto 1fr; height:100vh;
+}
+button{font-family:inherit;color:inherit;cursor:pointer;border:0;background:none}
+::selection{background:rgba(31,168,222,.28)}
+
+/* ===== Top bar ===== */
+.topbar{
+  display:flex; align-items:center; gap:16px; padding:11px 18px;
+  background:linear-gradient(180deg,var(--panel),color-mix(in srgb,var(--panel) 88%,transparent));
+  border-bottom:1px solid var(--line); position:relative; z-index:6;
+}
+.brand{display:flex; align-items:center; gap:12px; min-width:0}
+.mark{width:38px;height:38px;flex:none;border-radius:11px;display:grid;place-items:center;
+  background:radial-gradient(120% 120% at 30% 20%,var(--hub),#0A5C4A);box-shadow:0 4px 14px rgba(14,107,90,.4)}
+.mark svg{width:22px;height:22px}
+.brand h1{margin:0;font-size:16px;font-weight:700;letter-spacing:-.2px;line-height:1.15;white-space:nowrap}
+.brand .sub{font-size:11px;color:var(--ink-3);white-space:nowrap}
+.prov{display:flex;align-items:center;gap:7px 13px;flex-wrap:wrap;margin-inline-start:auto;
+  font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums}
+.prov .sep{width:1px;height:12px;background:var(--line)}
+.prov b{color:var(--ink-2);font-weight:600}
+.verified{display:inline-flex;align-items:center;gap:5px;color:var(--hub);font-weight:700}
+.verified svg{width:13px;height:13px}
+.tbtn{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;color:var(--ink-2);
+  border:1px solid var(--line);background:var(--panel-2);transition:.15s}
+.tbtn:hover{color:var(--ink);border-color:var(--hub)}
+.tbtn svg{width:17px;height:17px}
+.tbtn:focus-visible,.chip:focus-visible,.hubbar li:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+
+/* ===== Stage ===== */
+.wrap{position:relative;display:grid;grid-template-columns:1fr var(--rail);min-height:0}
+.stage{position:relative;background:
+  radial-gradient(90% 80% at 62% 8%,color-mix(in srgb,var(--hub) 8%,transparent),transparent 60%),
+  var(--stage);overflow:hidden}
+#net{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
+#net.drag{cursor:grabbing}
+.edge{fill:none;stroke-linecap:round}
+.node{cursor:pointer}
+.nlabel{font-size:9px;fill:var(--ink-3);paint-order:stroke;stroke:var(--stage);stroke-width:3px;pointer-events:none}
+.hublabel{font-size:10px;font-weight:700;fill:var(--ink);paint-order:stroke;stroke:var(--stage);stroke-width:3.5px;pointer-events:none}
+.reglabel{font-size:15px;font-weight:700;fill:var(--ink-3);opacity:.30;letter-spacing:1px;pointer-events:none}
+.flow{stroke-dasharray:2 7;animation:march 1s linear infinite}
+@keyframes march{to{stroke-dashoffset:-18}}
+.pulse{transform-box:fill-box;transform-origin:center;animation:pulse 3.2s ease-out infinite}
+@keyframes pulse{0%{opacity:.5;transform:scale(1)}70%{opacity:0;transform:scale(2.4)}100%{opacity:0;transform:scale(2.4)}}
+
+/* stage overlays */
+.legend{position:absolute;inset-block-end:16px;inset-inline-start:16px;background:color-mix(in srgb,var(--panel) 92%,transparent);
+  backdrop-filter:blur(6px);border:1px solid var(--line);border-radius:13px;padding:11px 13px;box-shadow:var(--shadow);z-index:3;max-width:230px}
+.legend h4{margin:0 0 8px;font-size:10px;font-weight:700;letter-spacing:1.4px;color:var(--ink-3);text-transform:uppercase}
+.lg{display:flex;align-items:center;gap:8px;font-size:11.5px;padding:2.5px 0;color:var(--ink-2);cursor:pointer;user-select:none}
+.lg .dot{width:11px;height:11px;border-radius:50%;flex:none;box-shadow:0 0 0 3px color-mix(in srgb,currentColor 18%,transparent)}
+.lg.off{opacity:.34}
+.lg .cnt{margin-inline-start:auto;font-variant-numeric:tabular-nums;color:var(--ink-3);font-size:10.5px}
+.lg.hublg .dm{width:11px;height:11px;flex:none;background:var(--hub);border-radius:2px 2px 2px 0;transform:rotate(45deg)}
+.zoom{position:absolute;inset-block-start:16px;inset-inline-start:16px;display:flex;flex-direction:column;gap:1px;
+  border-radius:11px;overflow:hidden;border:1px solid var(--line);box-shadow:var(--shadow);z-index:3}
+.zoom button{width:36px;height:36px;background:var(--panel);color:var(--ink-2);display:grid;place-items:center;font-size:18px}
+.zoom button:hover{background:var(--panel-2);color:var(--ink)}
+.zoom button+button{border-top:1px solid var(--line)}
+.hint{position:absolute;inset-block-start:16px;inset-inline-end:16px;font-size:10.5px;color:var(--ink-3);
+  background:color-mix(in srgb,var(--panel) 82%,transparent);border:1px solid var(--line);border-radius:20px;padding:5px 12px;z-index:3}
+
+/* ===== Rail ===== */
+.rail{background:var(--panel);border-inline-start:1px solid var(--line);display:flex;flex-direction:column;min-height:0;z-index:5}
+.search{padding:14px 16px 10px;border-bottom:1px solid var(--line-2);position:relative}
+.search svg{position:absolute;inset-inline-start:26px;inset-block-start:24px;width:15px;height:15px;color:var(--ink-3)}
+.search input{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;
+  padding:9px 34px 9px 12px;font-size:13px;color:var(--ink);outline:none}
+.search input:focus{border-color:var(--brand)}
+.railscroll{overflow-y:auto;flex:1;padding:14px 16px 24px}
+.railscroll::-webkit-scrollbar{width:9px}.railscroll::-webkit-scrollbar-thumb{background:var(--line);border-radius:5px;border:3px solid var(--panel)}
+.sec{margin-bottom:18px}
+.sec>.t{font-size:10px;font-weight:700;letter-spacing:1.4px;color:var(--ink-3);text-transform:uppercase;margin-bottom:9px;display:flex;align-items:center;gap:7px}
+.sec>.t em{font-style:normal;color:var(--ink-3);opacity:.7;font-weight:500;letter-spacing:0}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.kpi{background:var(--panel-2);border:1px solid var(--line);border-radius:12px;padding:11px 12px}
+.kpi b{display:block;font-size:22px;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.5px;line-height:1}
+.kpi small{display:block;margin-top:3px;font-size:10.5px;color:var(--ink-3)}
+.kpi .u{color:var(--ink-3);font-size:12px;font-weight:500}
+.chips{display:flex;flex-wrap:wrap;gap:7px}
+.chip{font-size:11.5px;padding:5px 11px;border-radius:20px;border:1px solid var(--line);background:var(--panel-2);
+  color:var(--ink-2);transition:.14s;display:inline-flex;align-items:center;gap:6px;font-variant-numeric:tabular-nums}
+.chip:hover{border-color:var(--ink-3)}
+.chip.on{background:color-mix(in srgb,var(--brand) 16%,var(--panel-2));border-color:var(--brand);color:var(--ink)}
+.chip .c{width:8px;height:8px;border-radius:50%}
+.chip .n{opacity:.6;font-size:10px}
+select.pick{width:100%;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:12.5px;color:var(--ink);outline:none}
+select.pick:focus{border-color:var(--brand)}
+
+/* hub bars */
+.hubbar{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:3px}
+.hubbar li{display:grid;grid-template-columns:1fr auto;align-items:center;gap:9px;font-size:11.5px;padding:4px 6px;border-radius:8px;cursor:pointer}
+.hubbar li:hover{background:var(--panel-2)}
+.hubbar li.on{background:color-mix(in srgb,var(--hub) 14%,var(--panel-2))}
+.hubbar .nm{color:var(--ink-2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hubbar .tk{grid-column:1/-1;height:5px;background:var(--line-2);border-radius:3px;overflow:hidden}
+.hubbar .tk i{display:block;height:100%;background:linear-gradient(90deg,var(--hub),color-mix(in srgb,var(--hub) 55%,var(--brand)));border-radius:3px}
+.hubbar .vl{font-variant-numeric:tabular-nums;color:var(--ink);font-weight:600;font-size:11px}
+
+/* detail */
+.detail{background:var(--panel-2);border:1px solid var(--line);border-radius:14px;padding:0;overflow:hidden}
+.detail .hd{padding:13px 15px;display:flex;align-items:center;gap:11px;border-bottom:1px solid var(--line)}
+.detail .badge{width:40px;height:40px;flex:none;border-radius:11px;display:grid;place-items:center;font-weight:700;font-size:11px;color:#fff;font-variant-numeric:tabular-nums}
+.detail .hd .nm{font-weight:700;font-size:14px}
+.detail .hd .st{font-size:11px;color:var(--ink-3);margin-top:2px}
+.detail dl{margin:0;padding:11px 15px 14px;display:grid;grid-template-columns:auto 1fr;gap:8px 14px;font-size:12px}
+.detail dt{color:var(--ink-3)}
+.detail dd{margin:0;text-align:end;font-weight:500;font-variant-numeric:tabular-nums}
+.detail .link{display:block;padding:11px 15px;border-top:1px solid var(--line);font-size:11.5px;color:var(--brand);text-align:center;font-weight:600}
+.empty{color:var(--ink-3);font-size:12px;text-align:center;padding:26px 12px;line-height:1.7}
+.empty svg{width:26px;height:26px;opacity:.5;margin-bottom:8px}
+.pending li{display:flex;justify-content:space-between;gap:10px;font-size:11.5px;padding:5px 2px;border-bottom:1px solid var(--line-2);color:var(--ink-2);font-variant-numeric:tabular-nums}
+.pending{list-style:none;margin:0;padding:0;max-height:150px;overflow-y:auto}
+.pending .st{color:var(--ink-3);font-size:10.5px}
+.note{font-size:11px;color:var(--ink-3);background:color-mix(in srgb,var(--temp) 12%,var(--panel-2));
+  border:1px solid color-mix(in srgb,var(--temp) 30%,var(--line));border-radius:10px;padding:9px 11px;line-height:1.6;margin-top:9px}
+
+/* responsive */
+.railToggle{display:none}
+@media (max-width:880px){
+  .wrap{grid-template-columns:1fr}
+  .rail{position:fixed;inset-block:0;inset-inline-end:0;width:min(360px,86vw);transform:translateX(100%);
+    transition:transform .28s cubic-bezier(.4,0,.2,1);box-shadow:var(--shadow)}
+  [dir=rtl] .rail{transform:translateX(-100%)}
+  body.railopen .rail{transform:none}
+  .railToggle{display:grid}
+  .legend{max-width:180px}
+}
+@media (prefers-reduced-motion:reduce){.flow,.pulse{animation:none!important}}
+</style>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="mark"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="2.4"/><circle cx="4" cy="6" r="1.8"/><circle cx="20" cy="6" r="1.8"/><circle cx="5" cy="19" r="1.8"/><circle cx="19" cy="19" r="1.8"/><path d="M10.3 10.6 5.5 7M13.7 10.6 18.5 7M10.6 13.4 6 18M13.4 13.4 18 18"/></svg></div>
+    <div>
+      <h1>شبكة سلاسل الإمداد</h1>
+      <div class="sub">المحطات المدمجة ومراكز أرامكو للتوزيع · الدريس</div>
+    </div>
+  </div>
+  <div class="prov">
+    <span class="verified"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 4 5v6c0 5 3.4 8.4 8 11 4.6-2.6 8-6 8-11V5z"/><path d="m9 12 2 2 4-4"/></svg>بيانات معتمدة</span>
+    <span class="sep"></span><span>المصدر: <b>إدارة سلاسل الإمداد والتوزيع</b></span>
+    <span class="sep"></span><span>آخر تحديث: <b id="pUpd">—</b></span>
+    <span class="sep"></span><span>الإصدار <b id="pVer">—</b></span>
+  </div>
+  <button class="tbtn" id="themeBtn" title="تبديل السمة" aria-label="تبديل السمة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 13A9 9 0 0 1 11 3a7 7 0 1 0 10 10z"/></svg></button>
+  <button class="tbtn railToggle" id="railBtn" title="اللوحة" aria-label="فتح اللوحة"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M3 12h18M3 18h18"/></svg></button>
+</div>
+
+<div class="wrap">
+  <div class="stage">
+    <svg id="net" role="img" aria-label="شبكة المحطات المدمجة ومراكز التوزيع على خريطة المملكة"></svg>
+    <div class="zoom">
+      <button id="zin" aria-label="تكبير">+</button>
+      <button id="zout" aria-label="تصغير">−</button>
+      <button id="zfit" aria-label="ملء" title="عرض الكل"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9V5a2 2 0 0 1 2-2h4M21 9V5a2 2 0 0 0-2-2h-4M3 15v4a2 2 0 0 0 2 2h4M21 15v4a2 2 0 0 1-2 2h-4"/></svg></button>
+    </div>
+    <div class="hint">اسحب للتحريك · بالعجلة للتكبير · اضغط عقدة للتفاصيل</div>
+    <div class="legend" id="legend"></div>
+  </div>
+
+  <aside class="rail">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+      <input id="q" placeholder="ابحث بالكود أو الموقع أو المشروع…" autocomplete="off" aria-label="بحث">
+    </div>
+    <div class="railscroll">
+      <div class="sec"><div class="t">نظرة عامة</div><div class="kpis" id="kpis"></div></div>
+      <div class="sec"><div class="t">التصنيف <em id="catHint"></em></div><div class="chips" id="cats"></div></div>
+      <div class="sec"><div class="t">المشروع</div><select class="pick" id="proj"><option value="">كل المشاريع</option></select></div>
+      <div class="sec"><div class="t">حِمل مراكز أرامكو <em>محطة/مركز</em></div><ul class="hubbar" id="hubbar"></ul></div>
+      <div class="sec"><div class="t">التفاصيل</div><div id="detail"></div></div>
+      <div class="sec"><div class="t">بانتظار تحديد الموقع <em id="pendHint"></em></div><ul class="pending" id="pending"></ul>
+        <div class="note" id="pendNote"></div></div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const DATA = /*__DATA__*/{"stations": [{"code": "80041", "site": "املج", "project": "البحر الأحمر", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 25.509583, "lng": 37.044667, "cap": "75,000", "p1": "ديزل حيوي", "p2": "ديزل حيوي", "hub": "أرامكو ينبع", "km": 230.5}, {"code": "80042", "site": "املج", "project": "البحر الأحمر", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 25.509583, "lng": 37.044667, "cap": "75,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو ينبع", "km": 230.5}, {"code": "80035", "site": "املج", "project": "حقل", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 25.509583, "lng": 37.044667, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو ينبع", "km": 230.5}, {"code": "80022", "site": "املج", "project": "البحر الأحمر", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 25.509583, "lng": 37.044667, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو ينبع", "km": 230.5}, {"code": "80051", "site": "الوجه", "project": "امالا", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 26.680417, "lng": 36.227167, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو ضباء", "km": 122.4}, {"code": "80080", "site": "الوجه", "project": "امالا", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 26.680417, "lng": 36.227167, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو ضباء", "km": 122.4}, {"code": "80043", "site": "تبوك", "project": "نيوم", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 28.738167, "lng": 35.466056, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو تبوك", "km": 168.7}, {"code": "80047", "site": "تبوك", "project": "نيوم", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 28.738167, "lng": 35.466056, "cap": "75,000", "p1": "95", "p2": "95", "hub": "أرامكو تبوك", "km": 168.7}, {"code": "80052", "site": "تبوك", "project": "نيوم", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 28.738167, "lng": 35.466056, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو تبوك", "km": 168.7}, {"code": "80100", "site": "تبوك", "project": "نيوم", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 28.065111, "lng": 35.177278, "cap": "75,000", "p1": "95", "p2": "91", "hub": "أرامكو ضباء", "km": 112.8}, {"code": "80099", "site": "تبوك", "project": "نيوم", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 28.065111, "lng": 35.177278, "cap": "75,000", "p1": "95", "p2": "91", "hub": "أرامكو ضباء", "km": 112.8}, {"code": "80063", "site": "جدة", "project": "ميناء جدة", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 21.468694, "lng": 39.16725, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو جنوب جدة", "km": 22.6}, {"code": "80097", "site": "القصيم", "project": "عنيزة", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 26.073889, "lng": 43.994778, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو القصيم", "km": 40.1}, {"code": "80098", "site": "القصيم", "project": "عنيزة", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 26.114528, "lng": 44.029, "cap": "75,000", "p1": "ديزل", "p2": "91", "hub": "أرامكو القصيم", "km": 38.8}, {"code": "80085", "site": "القصيم", "project": "عنيزة", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 26.105417, "lng": 43.995361, "cap": "75,000", "p1": "95", "p2": "91", "hub": "أرامكو القصيم", "km": 36.1}, {"code": "80040", "site": "جدة", "project": "نقليات جدة", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 21.342139, "lng": 39.229944, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو جنوب جدة", "km": 7.2}, {"code": "80011", "site": "تناجيب", "project": "أرامكو - مشروع نسمـا", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 27.711278, "lng": 48.62275, "cap": "60,000", "p1": "91", "p2": "91", "hub": "أرامكو الجبيل", "km": 162.5}, {"code": "80027", "site": "الظهران", "project": "أرامكو", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 26.314278, "lng": 50.105778, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو الظهران", "km": 6.7}, {"code": "80026", "site": "الدهناء", "project": "أرامكو", "cat": "مواقع ثابتة", "status": "على راس العمل", "lat": 24.432444, "lng": 48.228806, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو جنوب الرياض", "km": 195.4}, {"code": "80034", "site": "رابغ", "project": "حديقة النورس", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 22.802361, "lng": 38.983806, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو رابغ", "km": 9.9}, {"code": "80038", "site": "جدة", "project": "الأمن العام", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 21.870306, "lng": 39.106528, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو شمال جدة", "km": 28.2}, {"code": "80039", "site": "الباحة", "project": "الأمن العام", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 20.146444, "lng": 41.062361, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو جنوب جدة", "km": 302.6}, {"code": "80061", "site": "الباحة", "project": "الأمن العام", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 20.146444, "lng": 41.062361, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو جنوب جدة", "km": 302.6}, {"code": "80012", "site": "رابغ", "project": "حديقة النورس", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 22.802083, "lng": 38.983417, "cap": "50,000", "p1": "ديزل", "p2": "", "hub": "أرامكو رابغ", "km": 9.9}, {"code": "80032", "site": "مكة المكرمة", "project": "الأمن العام", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 22.802083, "lng": 38.983417, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو رابغ", "km": 9.9}, {"code": "80057", "site": "الارطاوية", "project": "القاعية", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 26.425889, "lng": 45.573806, "cap": "75,000", "p1": "95", "p2": "95", "hub": "أرامكو القصيم", "km": 202.9}, {"code": "80058", "site": "الارطاوية", "project": "القاعية", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 26.425889, "lng": 45.573806, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو القصيم", "km": 202.9}, {"code": "80059", "site": "الارطاوية", "project": "القاعية", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 26.425889, "lng": 45.573806, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو القصيم", "km": 202.9}, {"code": "80074", "site": "الرياض", "project": "الحيسية", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.805944, "lng": 46.428944, "cap": "75,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو شمال الرياض", "km": 39.4}, {"code": "80093", "site": "الرياض", "project": "نفي", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 25.024361, "lng": 43.814083, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو القصيم", "km": 174.5}, {"code": "80094", "site": "الرياض", "project": "نفي", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 25.024361, "lng": 43.814083, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو القصيم", "km": 174.5}, {"code": "80091", "site": "الرياض", "project": "شركة سدر", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.632722, "lng": 46.880472, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو جنوب الرياض", "km": 27.5}, {"code": "80046", "site": "الرياض", "project": "شركة سدر", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.632722, "lng": 46.880472, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو جنوب الرياض", "km": 27.5}, {"code": "80069", "site": "الرياض", "project": "سوق الأبل الطوقي", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 25.448278, "lng": 46.525056, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو شمال الرياض", "km": 76.3}, {"code": "80072", "site": "الرياض", "project": "سوق الأبل الطوقي", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 25.448278, "lng": 46.525056, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو شمال الرياض", "km": 76.3}, {"code": "80044", "site": "جازان", "project": "محطة العيدابي", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 17.229306, "lng": 43.001167, "cap": "75,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو جازان", "km": 78.4}, {"code": "80048", "site": "جازان", "project": "محطة العيدابي", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 17.229306, "lng": 43.001167, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو جازان", "km": 78.4}, {"code": "80084", "site": "جازان", "project": "جزيرة فرسان", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 16.699778, "lng": 42.10725, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو جازان", "km": 65.4}, {"code": "80065", "site": "الربع الخالي", "project": "شيبة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 22.601444, "lng": 53.758028, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو الأحساء", "km": 597.0}, {"code": "80086", "site": "الربع الخالي", "project": "شيبة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 22.601444, "lng": 53.758028, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو الأحساء", "km": 597.0}, {"code": "80076", "site": "مكة المكرمة", "project": "موسم الحج", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 21.382861, "lng": 39.88875, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو جنوب جدة", "km": 98.5}, {"code": "80096", "site": "اشيقر", "project": "وزارة الطاقة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 25.336444, "lng": 45.174639, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو شمال الرياض", "km": 207.3}, {"code": "80081", "site": "اشيقر", "project": "وزارة الطاقة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 25.336444, "lng": 45.174639, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو شمال الرياض", "km": 207.3}, {"code": "80050", "site": "الجبيل", "project": "شركة زومكو", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 26.840361, "lng": 49.648444, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو الجبيل", "km": 34.6}, {"code": "80031", "site": "ينبع", "project": "نقليات ينبع", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": null, "lng": null, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": null, "km": null}, {"code": "80082", "site": "الجافورة", "project": "شركة سيسكو", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.916111, "lng": 50.294139, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو الأحساء", "km": 238.4}, {"code": "80070", "site": "جازان", "project": "الأمن العام", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 16.845417, "lng": 42.591611, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو جازان", "km": 9.5}, {"code": "80079", "site": "الريث", "project": "الأمن العام", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 17.644972, "lng": 42.738694, "cap": "75,000", "p1": "ديزل", "p2": "91", "hub": "أرامكو بيش", "km": 70.0}, {"code": "80095", "site": "الرياض", "project": "الجبيلة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.902778, "lng": 46.440472, "cap": "75,000", "p1": "95", "p2": "95", "hub": "أرامكو شمال الرياض", "km": 47.0}, {"code": "80075", "site": "الرياض", "project": "الجبيلة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.902778, "lng": 46.440472, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو شمال الرياض", "km": 47.0}, {"code": "80077", "site": "الرياض", "project": "الجبيلة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.902778, "lng": 46.440472, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو شمال الرياض", "km": 47.0}, {"code": "80037", "site": "الشقيق", "project": "شركة الكهرباء", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 17.624083, "lng": 42.1185, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو بيش", "km": 69.9}, {"code": "80033", "site": "الباحة", "project": "الأمن العام", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 20.237833, "lng": 41.634139, "cap": "75,000", "p1": "ديزل", "p2": "91", "hub": "أرامكو أبها", "km": 399.4}, {"code": "80010", "site": "تبوك", "project": "محطة رمز الحياة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 28.393972, "lng": 36.546306, "cap": "50,000", "p1": "", "p2": "", "hub": "أرامكو تبوك", "km": 2.3}, {"code": "80056", "site": "بني سعد", "project": "البلدية", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 20.9415, "lng": 40.805389, "cap": "75,000", "p1": "ديزل", "p2": "95", "hub": "أرامكو جنوب جدة", "km": 247.9}, {"code": "80068", "site": "بني سعد", "project": "البلدية", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 20.9415, "lng": 40.805389, "cap": "75,000", "p1": "ديزل", "p2": "91", "hub": "أرامكو جنوب جدة", "km": 247.9}, {"code": "80036", "site": "ميقوع", "project": "محطة ميقوع", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 29.804861, "lng": 38.909611, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو سكاكا", "km": 138.4}, {"code": "80090", "site": "جدة", "project": "الأمن العام", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": null, "lng": null, "cap": "75,000", "p1": "91", "p2": "95", "hub": null, "km": null}, {"code": "80083", "site": "الشعيبة", "project": "شركة الكهرباء", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.881194, "lng": 46.942139, "cap": "75,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو الوسيع", "km": 43.8}, {"code": "80025", "site": "الشقيق", "project": "الشقيق", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 29.298194, "lng": 39.93175, "cap": "50,000", "p1": "91", "p2": "95", "hub": "أرامكو سكاكا", "km": 83.7}, {"code": "80060", "site": "سامودة", "project": "محطة سامودة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 27.858556, "lng": 44.892778, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو القصيم", "km": 245.9}, {"code": "80087", "site": "سامودة", "project": "محطة سامودة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 27.858556, "lng": 44.892778, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو القصيم", "km": 245.9}, {"code": "80064", "site": "القرية العليا", "project": "محطة الشيّط", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 27.542556, "lng": 47.277694, "cap": "75,000", "p1": "ديزل", "p2": "91", "hub": "أرامكو الجبيل", "km": 285.8}, {"code": "80089", "site": "جازان", "project": "محطة البشري", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 16.897639, "lng": 42.685167, "cap": "75,000", "p1": "95", "p2": "95", "hub": "أرامكو جازان", "km": 16.2}, {"code": "80062", "site": "أملج", "project": "البحر الأحمر", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": null, "lng": null, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": null, "km": null}, {"code": "80055", "site": "أملج", "project": "البحر الأحمر", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": null, "lng": null, "cap": "75,000", "p1": "91", "p2": "91", "hub": null, "km": null}, {"code": "80021", "site": "ثادق", "project": "البلدية", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 25.272, "lng": 45.867111, "cap": "75,000", "p1": "91", "p2": "91", "hub": "أرامكو شمال الرياض", "km": 133.0}, {"code": "80092", "site": "اللهابة", "project": "محطة الصمان", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 27.240889, "lng": 46.975889, "cap": "75,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو شمال الرياض", "km": 301.6}, {"code": "80078", "site": "جازان", "project": "مرفأ الصيد", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 16.904583, "lng": 42.543194, "cap": "75,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو جازان", "km": 5.7}, {"code": "80088", "site": "رابغ", "project": "البيلسان", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 22.396444, "lng": 39.089278, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو رابغ", "km": 62.9}, {"code": "80110", "site": "الحسي", "project": "محطة الجضعي", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 25.421028, "lng": 46.096417, "cap": "75,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو شمال الرياض", "km": 105.5}, {"code": "80073", "site": "نيوم", "project": "البدع 2", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 28.539722, "lng": 35.037556, "cap": "75,000", "p1": "91", "p2": "95", "hub": "أرامكو ضباء", "km": 170.6}, {"code": "80071", "site": "نيوم", "project": "البدع 2", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 28.539722, "lng": 35.037556, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو ضباء", "km": 170.6}, {"code": "80030", "site": "نقليات جدة", "project": "مرسى البحيرات والليث", "cat": "مواقع مؤقتة", "status": "مرحلة التشغيل", "lat": 21.342167, "lng": 39.229833, "cap": "75,000", "p1": "", "p2": "", "hub": "أرامكو جنوب جدة", "km": 7.2}, {"code": "80028", "site": "ضرما", "project": "شركة الكهرباء", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.7865, "lng": 45.601694, "cap": "75,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو جنوب الرياض", "km": 137.1}, {"code": "80024", "site": "بنبان", "project": "شركة القاعدة للمقاولات", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 24.984833, "lng": 46.58275, "cap": "75,000", "p1": "ديزل", "p2": "ديزل", "hub": "أرامكو شمال الرياض", "km": 45.7}, {"code": "80017", "site": "قصيباء", "project": "محطة الحمراء", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 26.887861, "lng": 43.635778, "cap": "70,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو القصيم", "km": 91.5}, {"code": "80045", "site": "مشذوبة", "project": "مشذوبة", "cat": "مواقع مؤقتة", "status": "على راس العمل", "lat": 27.34225, "lng": 45.021056, "cap": "75,000", "p1": "91", "p2": "ديزل", "hub": "أرامكو القصيم", "km": 294.0}, {"code": "80023", "site": "ظلم", "project": "محطة الكويت", "cat": "مواقع مؤقتة", "status": "مرحلة التشغيل", "lat": 26.891139, "lng": 49.493333, "cap": "75,000", "p1": "", "p2": "", "hub": "أرامكو الجبيل", "km": 24.1}, {"code": "80016", "site": "ظلم", "project": "محطة الكويت", "cat": "مواقع مؤقتة", "status": "مرحلة التشغيل", "lat": 26.891139, "lng": 49.493333, "cap": "70,000", "p1": "", "p2": "", "hub": "أرامكو الجبيل", "km": 24.1}], "stored": [{"code": "80101", "project": "نقليات الرياض", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80102", "project": "نقليات الرياض", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80103", "project": "نقليات ينبع", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80104", "project": "نقليات ينبع", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80105", "project": "نقليات الرياض", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80106", "project": "نقليات الرياض", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80107", "project": "نقليات الرياض", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80108", "project": "نقليات الرياض", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80109", "project": "نقليات الجبيل", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80054", "project": "نقليات الجبيل", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/F2c3jFksNekyUqyM9?g_st=ipc"}, {"code": "80053", "project": "نقليات ينبع", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/F2c3jFksNekyUqyM9?g_st=ipc"}, {"code": "80049", "project": "نقليات ينبع", "cat": "مخزّنة", "status": "تخزين", "lat": 22.179108, "lng": 39.288521, "cap": "75,000", "link": "https://maps.google.com/?q=22.179108,39.288521"}, {"code": "80066", "project": "نقليات ينبع", "cat": "مخزّنة", "status": "تخزين", "lat": 22.179108, "lng": 39.288521, "cap": "75,000", "link": "https://maps.google.com/?q=22.179108,39.288521"}, {"code": "80029", "project": "نقليات الجبيل", "cat": "مخزّنة", "status": "تخزين", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/e5VYBDhngonWq5gP7?g_st=ipc"}, {"code": "80008", "project": "نقليات الرياض", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "50,400", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80000", "project": "مصنع فآل", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "28,000", "link": "https://maps.app.goo.gl/aWUP3DPEqEuPotuk8?g_st=ic"}, {"code": "80013", "project": "نقليات الرياض", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "50,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80067", "project": "نقليات الرياض", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80009", "project": "نقليات الرياض", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "50,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80007", "project": "نقليات الرياض", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "50,400", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80019", "project": "نقليات الرياض", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "70,000", "link": "https://maps.app.goo.gl/LwwumkGkB626p8Mi9"}, {"code": "80020", "project": "نقليات الرياض", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "75,000", "link": "https://maps.app.goo.gl/e5VYBDhngonWq5gP7?g_st=ipc"}, {"code": "80015", "project": "نقليات الرياض", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "70,000", "link": "https://maps.app.goo.gl/e5VYBDhngonWq5gP7?g_st=ipc"}, {"code": "80014", "project": "نقليات ينبع", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "70,000", "link": "https://maps.app.goo.gl/F2c3jFksNekyUqyM9?g_st=ipc"}, {"code": "80018", "project": "نقليات ينبع", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "50,000", "link": "https://maps.app.goo.gl/F2c3jFksNekyUqyM9?g_st=ipc"}, {"code": "80006", "project": "نقليات ينبع", "cat": "صيانة", "status": "تحت إجراء الصيانة", "lat": null, "lng": null, "cap": "40,500", "link": "https://maps.app.goo.gl/F2c3jFksNekyUqyM9?g_st=ipc"}], "hubs": [{"name": "أرامكو جنوب الرياض", "lat": 24.55, "lng": 46.72, "load": 4}, {"name": "أرامكو شمال الرياض", "lat": 24.92, "lng": 46.69, "load": 12}, {"name": "أرامكو الوسيع", "lat": 24.62, "lng": 46.95, "load": 1}, {"name": "أرامكو الأحساء", "lat": 25.36, "lng": 49.57, "load": 3}, {"name": "أرامكو القصيم", "lat": 26.31, "lng": 43.84, "load": 12}, {"name": "أرامكو الظهران", "lat": 26.29, "lng": 50.12, "load": 1}, {"name": "أرامكو القطيف", "lat": 26.52, "lng": 50.02, "load": 0}, {"name": "أرامكو الجبيل", "lat": 27.01, "lng": 49.62, "load": 5}, {"name": "أرامكو السليل", "lat": 20.46, "lng": 45.58, "load": 0}, {"name": "أرامكو المدينة", "lat": 24.42, "lng": 39.64, "load": 0}, {"name": "أرامكو أبها", "lat": 18.27, "lng": 42.74, "load": 1}, {"name": "أرامكو جنوب جدة", "lat": 21.34, "lng": 39.2, "load": 8}, {"name": "أرامكو شمال جدة", "lat": 21.7, "lng": 39.17, "load": 1}, {"name": "أرامكو سكاكا", "lat": 29.88, "lng": 40.1, "load": 2}, {"name": "أرامكو ينبع", "lat": 24.05, "lng": 38.2, "load": 4}, {"name": "أرامكو بيش", "lat": 17.47, "lng": 42.55, "load": 2}, {"name": "أرامكو جازان", "lat": 16.9, "lng": 42.58, "load": 6}, {"name": "أرامكو رابغ", "lat": 22.8, "lng": 39.03, "load": 4}, {"name": "أرامكو طريف", "lat": 31.67, "lng": 38.66, "load": 0}, {"name": "أرامكو تبوك", "lat": 28.4, "lng": 36.56, "load": 4}, {"name": "أرامكو ضباء", "lat": 27.35, "lng": 35.69, "load": 6}], "meta": {"updated": "2026-07-27", "version": "2.0", "source": "إدارة سلاسل الإمداد والتوزيع — الدريس"}};
+const SVGNS="http://www.w3.org/2000/svg";
+const CAT={
+  'مواقع ثابتة':{c:'#13B892',key:'fixed',lbl:'مواقع ثابتة'},
+  'مواقع مؤقتة':{c:'#E0A63C',key:'temp',lbl:'مواقع مؤقتة'},
+  'مرحلة التشغيل':{c:'#5E86A6',key:'oper',lbl:'مرحلة التشغيل'},
+  'مخزّنة':{c:'#3E86E0',key:'store',lbl:'مخزّنة'},
+  'صيانة':{c:'#E4566A',key:'maint',lbl:'صيانة'},
+};
+const catOf=s=>CAT[s.cat]||{c:'#5E86A6',key:'oper',lbl:s.cat||'أخرى'};
+const $=s=>document.querySelector(s);
+const fmt=n=>Number(n||0).toLocaleString('en-US');
+
+/* ---- unify located nodes (stations + located stored) ---- */
+const hasLL=s=>s.lat!=null&&s.lng!=null&&!isNaN(s.lat)&&!isNaN(s.lng);
+const located=[...DATA.stations.filter(hasLL), ...DATA.stored.filter(hasLL)]
+  .map((s,i)=>({...s,_i:i}));
+const unlocated=[
+  ...DATA.stations.filter(s=>!hasLL(s)).map(s=>({...s,_kind:'station'})),
+  ...DATA.stored.filter(s=>!hasLL(s)).map(s=>({...s,_kind:'stored'})),
+];
+const hubs=DATA.hubs;
+const hubByName=Object.fromEntries(hubs.map(h=>[h.name,h]));
+
+/* ---- projection over KSA bounds ---- */
+const allLat=[...located.map(s=>s.lat),...hubs.map(h=>h.lat)];
+const allLng=[...located.map(s=>s.lng),...hubs.map(h=>h.lng)];
+const bounds={la0:Math.min(...allLat),la1:Math.max(...allLat),lo0:Math.min(...allLng),lo1:Math.max(...allLng)};
+const PAD=60, W=1000, H=1000;
+function project(lat,lng){
+  const x=PAD+(lng-bounds.lo0)/(bounds.lo1-bounds.lo0)*(W-2*PAD);
+  const y=PAD+(bounds.la1-lat)/(bounds.la1-bounds.la0)*(H-2*PAD);
+  return [x,y];
+}
+const regions=[
+  {t:'نجد',la:25.6,lo:45.3},{t:'الحجاز',la:22.6,lo:39.9},{t:'المنطقة الشرقية',la:27.3,lo:49.6},
+  {t:'عسير · جازان',la:17.9,lo:43.4},{t:'الحدود الشمالية',la:30.6,lo:40.8},{t:'تبوك',la:28.9,lo:36.9}
+];
+
+const net=$('#net');
+net.setAttribute('viewBox',`0 0 ${W} ${H}`);
+const layers={};
+['grid','edges','regions','nodes','hubs','labels'].forEach(k=>{
+  const g=document.createElementNS(SVGNS,'g'); g.dataset.layer=k; net.appendChild(g); layers[k]=g;
+});
+
+/* grid */
+(function(){
+  for(let i=0;i<=20;i++){
+    const x=i/20*W, y=i/20*H;
+    for(const [x1,y1,x2,y2] of [[x,0,x,H],[0,y,W,y]]){
+      const l=document.createElementNS(SVGNS,'line');
+      l.setAttribute('x1',x1);l.setAttribute('y1',y1);l.setAttribute('x2',x2);l.setAttribute('y2',y2);
+      l.setAttribute('stroke','var(--grid)');l.setAttribute('stroke-width','1');
+      layers.grid.appendChild(l);
+    }
+  }
+})();
+/* region labels */
+regions.forEach(r=>{
+  const [x,y]=project(r.la,r.lo);
+  const t=document.createElementNS(SVGNS,'text');
+  t.setAttribute('x',x);t.setAttribute('y',y);t.setAttribute('text-anchor','middle');
+  t.setAttribute('class','reglabel');t.textContent=r.t;layers.regions.appendChild(t);
+});
+
+/* ---- draw hubs ---- */
+const maxLoad=Math.max(...hubs.map(h=>h.load),1);
+const hubEls={};
+hubs.forEach(h=>{
+  const [x,y]=project(h.lat,h.lng);
+  h._x=x;h._y=y;
+  const g=document.createElementNS(SVGNS,'g');g.setAttribute('class','node hub');g.setAttribute('tabindex','0');
+  g.setAttribute('role','button');g.setAttribute('aria-label',`مركز ${h.name}، ${h.load} محطة`);
+  const r=9+ (h.load/maxLoad)*13;
+  const ring=document.createElementNS(SVGNS,'circle');
+  ring.setAttribute('cx',x);ring.setAttribute('cy',y);ring.setAttribute('r',r);
+  ring.setAttribute('fill','var(--hub-ring)');ring.setAttribute('class','pulse');
+  const dm=document.createElementNS(SVGNS,'rect');
+  const s=r*1.05;
+  dm.setAttribute('x',x-s/2);dm.setAttribute('y',y-s/2);dm.setAttribute('width',s);dm.setAttribute('height',s);
+  dm.setAttribute('rx',3);dm.setAttribute('transform',`rotate(45 ${x} ${y})`);
+  dm.setAttribute('fill','var(--hub)');dm.setAttribute('stroke','var(--stage)');dm.setAttribute('stroke-width','2');
+  g.append(ring,dm);
+  g.addEventListener('click',()=>selectHub(h.name));
+  g.addEventListener('keydown',e=>{if(e.key==='Enter'){selectHub(h.name)}});
+  g.addEventListener('pointerenter',()=>highlightHub(h.name,true));
+  g.addEventListener('pointerleave',()=>{if(!selHub)highlightHub(h.name,false)});
+  layers.hubs.appendChild(g);
+  hubEls[h.name]=g;
+  const short=h.name.replace('أرامكو ','');
+  const t=document.createElementNS(SVGNS,'text');
+  t.setAttribute('x',x);t.setAttribute('y',y-r-5);t.setAttribute('text-anchor','middle');
+  t.setAttribute('class','hublabel');t.textContent=short;
+  t.style.opacity=(0.45+0.55*(h.load/maxLoad)).toFixed(2);   // de-clutter: faint for small hubs
+  layers.labels.appendChild(t);
+  h._lbl=t;h._lblBase=t.style.opacity;
+});
+
+/* ---- draw edges + station nodes ---- */
+const nodeEls=[];
+located.forEach(s=>{
+  const [x,y]=project(s.lat,s.lng);s._x=x;s._y=y;
+  const meta=catOf(s);
+  const hub=s.hub&&hubByName[s.hub];
+  if(hub){
+    const p=document.createElementNS(SVGNS,'path');
+    const mx=(x+hub._x)/2, my=(y+hub._y)/2 - Math.hypot(x-hub._x,y-hub._y)*0.12;
+    p.setAttribute('d',`M${x} ${y} Q ${mx} ${my} ${hub._x} ${hub._y}`);
+    p.setAttribute('class','edge');p.setAttribute('stroke',meta.c);
+    p.setAttribute('stroke-width','1');p.setAttribute('opacity','.22');
+    layers.edges.appendChild(p);s._edge=p;
+  }
+  const g=document.createElementNS(SVGNS,'g');g.setAttribute('class','node');g.setAttribute('tabindex','0');
+  g.setAttribute('role','button');g.setAttribute('aria-label',`محطة ${s.code}${s.site?'، '+s.site:''}، ${meta.lbl}`);
+  const c=document.createElementNS(SVGNS,'circle');
+  c.setAttribute('cx',x);c.setAttribute('cy',y);c.setAttribute('r',5.2);
+  c.setAttribute('fill',meta.c);c.setAttribute('stroke','var(--stage)');c.setAttribute('stroke-width','1.6');
+  g.appendChild(c);
+  g.addEventListener('click',e=>{e.stopPropagation();selectNode(s)});
+  g.addEventListener('keydown',e=>{if(e.key==='Enter')selectNode(s)});
+  g.addEventListener('pointerenter',()=>hoverNode(s,true));
+  g.addEventListener('pointerleave',()=>hoverNode(s,false));
+  layers.nodes.appendChild(g);
+  s._g=g;s._c=c;s._meta=meta;nodeEls.push(s);
+});
+
+/* ---- state + filters ---- */
+const state={q:'',cats:new Set(Object.keys(CAT)),proj:'',hub:null};
+let selHub=null, selNode=null;
+
+function passes(s){
+  const m=catOf(s);
+  if(!state.cats.has(s.cat) && state.cats.size<Object.keys(CAT).length && !state.cats.has(m.lbl)) {
+    if(![...state.cats].includes(s.cat)) return false;
+  }
+  if(!state.cats.has(s.cat)) return false;
+  if(state.proj && s.project!==state.proj) return false;
+  if(state.hub && s.hub!==state.hub) return false;
+  if(state.q){
+    const q=state.q.trim().toLowerCase();
+    const blob=(s.code+' '+(s.site||'')+' '+(s.project||'')+' '+(s.hub||'')).toLowerCase();
+    if(!blob.includes(q)) return false;
+  }
+  return true;
+}
+function applyFilters(){
+  let vis=0;
+  nodeEls.forEach(s=>{
+    const ok=passes(s);
+    s._g.style.display=ok?'':'none';
+    if(s._edge) s._edge.style.display=ok?'':'none';
+    if(ok) vis++;
+  });
+  // hub relevance dim
+  const activeHubs=new Set(nodeEls.filter(s=>passes(s)&&s.hub).map(s=>s.hub));
+  hubs.forEach(h=>{
+    const dim=(state.hub&&state.hub!==h.name);
+    hubEls[h.name].style.opacity=dim?'.25':'1';
+    if(h._lbl)h._lbl.style.opacity=dim?'.2':h._lblBase;
+  });
+  renderKpis(vis);
+  renderHubbar();
+}
+
+/* ---- interactions ---- */
+function hoverNode(s,on){
+  if(s._edge){s._edge.setAttribute('opacity',on?'.9':'.22');s._edge.classList.toggle('flow',on);s._edge.setAttribute('stroke-width',on?'2':'1');}
+  s._c.setAttribute('r',on?7:5.2);
+}
+function highlightHub(name,on){
+  nodeEls.forEach(s=>{
+    if(s.hub===name&&s._edge&&s._g.style.display!=='none'){
+      s._edge.setAttribute('opacity',on?'.75':'.22');s._edge.classList.toggle('flow',on);
+      s._edge.setAttribute('stroke-width',on?'1.6':'1');
+    }
+  });
+}
+function selectHub(name){
+  state.hub=(state.hub===name)?null:name;
+  selHub=state.hub;
+  applyFilters();
+  document.querySelectorAll('.hubbar li').forEach(li=>li.classList.toggle('on',li.dataset.h===state.hub));
+  const h=hubByName[name];
+  if(state.hub){
+    focusOn([h,...nodeEls.filter(s=>s.hub===name)]);
+    detailHub(h);
+  }
+}
+function selectNode(s){
+  selNode=s;
+  document.body.classList.remove('railopen');
+  detailNode(s);
+  focusOn([s, s.hub&&hubByName[s.hub]].filter(Boolean),1.6);
+  // flash
+  nodeEls.forEach(n=>n._c.setAttribute('stroke','var(--stage)'));
+  s._c.setAttribute('stroke','#fff');s._c.setAttribute('stroke-width','2.4');
+  if(s._edge){s._edge.setAttribute('opacity','.9');s._edge.classList.add('flow');}
+}
+
+/* ---- viewBox zoom/pan ---- */
+// home view = tight square around all plotted nodes (minimal dead space)
+const HOME=(function(){
+  const xs=[...located.map(s=>s._x),...hubs.map(h=>h._x)];
+  const ys=[...located.map(s=>s._y),...hubs.map(h=>h._y)];
+  const minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
+  const cx=(minx+maxx)/2,cy=(miny+maxy)/2,size=Math.max(maxx-minx,maxy-miny)*1.12;
+  return {x:cx-size/2,y:cy-size/2,w:size,h:size};
+})();
+let vb={...HOME};
+function setVB(){net.setAttribute('viewBox',`${vb.x} ${vb.y} ${vb.w} ${vb.h}`)}
+function focusOn(items,factor=2.2){
+  if(!items.length)return;
+  const xs=items.map(i=>i._x),ys=items.map(i=>i._y);
+  const minx=Math.min(...xs),maxx=Math.max(...xs),miny=Math.min(...ys),maxy=Math.max(...ys);
+  const cx=(minx+maxx)/2,cy=(miny+maxy)/2;
+  const w=Math.max((maxx-minx)*factor,260),h=Math.max((maxy-miny)*factor,260);
+  const size=Math.max(w,h);
+  animateVB({x:cx-size/2,y:cy-size/2,w:size,h:size});
+}
+function fitAll(){animateVB({...HOME})}
+let anim;
+function animateVB(t){
+  cancelAnimationFrame(anim);const s={...vb},t0=performance.now(),d=380;
+  (function tick(now){
+    const k=Math.min(1,(now-t0)/d),e=1-Math.pow(1-k,3);
+    vb={x:s.x+(t.x-s.x)*e,y:s.y+(t.y-s.y)*e,w:s.w+(t.w-s.w)*e,h:s.h+(t.h-s.h)*e};
+    setVB();if(k<1)anim=requestAnimationFrame(tick);
+  })(t0);
+}
+net.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const r=net.getBoundingClientRect();
+  const px=(e.clientX-r.left)/r.width, py=(e.clientY-r.top)/r.height;
+  const f=e.deltaY>0?1.12:0.89;
+  const nw=Math.min(W*1.4,Math.max(120,vb.w*f)),nh=nw;
+  vb={x:vb.x+(vb.w-nw)*px, y:vb.y+(vb.h-nh)*py, w:nw, h:nh};setVB();
+},{passive:false});
+let pan=null;
+net.addEventListener('pointerdown',e=>{pan={x:e.clientX,y:e.clientY,vx:vb.x,vy:vb.y};net.classList.add('drag');net.setPointerCapture(e.pointerId)});
+net.addEventListener('pointermove',e=>{
+  if(!pan)return;const r=net.getBoundingClientRect();
+  vb.x=pan.vx-(e.clientX-pan.x)/r.width*vb.w;
+  vb.y=pan.vy-(e.clientY-pan.y)/r.height*vb.h;setVB();
+});
+net.addEventListener('pointerup',e=>{pan=null;net.classList.remove('drag')});
+net.addEventListener('pointercancel',()=>{pan=null;net.classList.remove('drag')});
+net.addEventListener('click',e=>{if(e.target===net||e.target.parentNode===layers.grid){/* background */}});
+$('#zin').onclick=()=>{const c={x:vb.x+vb.w/2,y:vb.y+vb.h/2};const w=Math.max(120,vb.w*.75);animateVB({x:c.x-w/2,y:c.y-w/2,w,h:w})};
+$('#zout').onclick=()=>{const c={x:vb.x+vb.w/2,y:vb.y+vb.h/2};const w=Math.min(W*1.3,vb.w*1.3);animateVB({x:c.x-w/2,y:c.y-w/2,w,h:w})};
+$('#zfit').onclick=()=>{state.hub=null;selHub=null;applyFilters();document.querySelectorAll('.hubbar li').forEach(li=>li.classList.remove('on'));fitAll()};
+
+/* ---- rail rendering ---- */
+function renderKpis(vis){
+  const total=DATA.stations.length, fixed=DATA.stations.filter(s=>s.cat==='مواقع ثابتة').length;
+  const pend=DATA.stored.filter(s=>s.lat==null).length;
+  const avg=Math.round(DATA.stations.filter(s=>s.km).reduce((a,s)=>a+s.km,0)/DATA.stations.filter(s=>s.km).length);
+  $('#kpis').innerHTML=[
+    ['المحطات', total],['ظاهرة الآن', vis==null?total:vis],
+    ['مراكز التوزيع', hubs.length],['متوسط البُعد', avg, 'كم'],
+    ['ثابتة', fixed],['قيد التخزين/الصيانة', DATA.stored.length],
+  ].map(([l,v,u])=>`<div class="kpi"><b>${fmt(v)}${u?` <span class="u">${u}</span>`:''}</b><small>${l}</small></div>`).join('');
+}
+function renderCats(){
+  const counts={};located.forEach(s=>{const k=catOf(s).lbl;counts[k]=(counts[k]||0)+1});
+  $('#cats').innerHTML=Object.entries(CAT).filter(([k])=>counts[CAT[k].lbl]).map(([k,m])=>
+    `<button class="chip ${state.cats.has(k)?'on':''}" data-cat="${k}"><span class="c" style="background:${m.c}"></span>${m.lbl}<span class="n">${counts[m.lbl]||0}</span></button>`).join('');
+  document.querySelectorAll('#cats .chip').forEach(b=>b.onclick=()=>{
+    const k=b.dataset.cat;
+    if(state.cats.has(k))state.cats.delete(k);else state.cats.add(k);
+    if(state.cats.size===0)Object.keys(CAT).forEach(x=>state.cats.add(x));
+    renderCats();applyFilters();
+  });
+  $('#catHint').textContent=state.cats.size<Object.keys(CAT).length?'مُصفّى':'';
+}
+function renderProj(){
+  const projs=[...new Set(DATA.stations.map(s=>s.project).filter(Boolean))].sort();
+  $('#proj').innerHTML='<option value="">كل المشاريع</option>'+projs.map(p=>`<option${p===state.proj?' selected':''}>${p}</option>`).join('');
+  $('#proj').onchange=e=>{state.proj=e.target.value;applyFilters()};
+}
+function renderHubbar(){
+  const active={};nodeEls.forEach(s=>{if(passes(s)&&s.hub)active[s.hub]=(active[s.hub]||0)+1});
+  const sorted=hubs.slice().sort((a,b)=>b.load-a.load).filter(h=>h.load>0);
+  const mx=Math.max(...sorted.map(h=>h.load),1);
+  $('#hubbar').innerHTML=sorted.map(h=>`
+    <li data-h="${h.name}" tabindex="0" class="${state.hub===h.name?'on':''}" role="button" aria-label="${h.name}، ${h.load} محطة">
+      <span class="nm">${h.name.replace('أرامكو ','')}</span><span class="vl">${active[h.name]||0}<span style="color:var(--ink-3)">/${h.load}</span></span>
+      <span class="tk"><i style="width:${Math.round(h.load/mx*100)}%"></i></span>
+    </li>`).join('');
+  document.querySelectorAll('#hubbar li').forEach(li=>{
+    li.onclick=()=>selectHub(li.dataset.h);
+    li.onkeydown=e=>{if(e.key==='Enter')selectHub(li.dataset.h)};
+  });
+}
+function badge(meta){return `<div class="badge" style="background:${meta.c}">`}
+function detailNode(s){
+  const m=catOf(s);
+  const rows=[
+    ['التصنيف',m.lbl],['الموقع',s.site||'—'],['المشروع',s.project||'—'],
+    ['الحالة',s.status||'—'],['السعة',s.cap?s.cap+' لتر':'—'],
+    ['المنتج',[s.p1,s.p2].filter(Boolean).join(' · ')||'—'],
+    ['أقرب مركز',s.hub?s.hub.replace('أرامكو ','')+(s.km?` · ${Math.round(s.km)} كم`:''):'—'],
+  ];
+  $('#detail').innerHTML=`<div class="detail">
+    <div class="hd">${badge(m)}${s.code.slice(-3)}</div>
+      <div><div class="nm">محطة ${s.code}</div><div class="st">${s.site||m.lbl}</div></div></div>
+    <dl>${rows.map(([k,v])=>`<dt>${k}</dt><dd>${v}</dd>`).join('')}</dl>
+    ${s.link?`<a class="link" href="${s.link}" target="_blank" rel="noopener">فتح الموقع على الخريطة ↗</a>`:''}
+  </div>`;
+}
+function detailHub(h){
+  const list=nodeEls.filter(s=>s.hub===h.name);
+  $('#detail').innerHTML=`<div class="detail">
+    <div class="hd"><div class="badge" style="background:var(--hub);border-radius:11px 11px 11px 2px">${h.load}</div>
+      <div><div class="nm">${h.name}</div><div class="st">مركز توزيع أرامكو · ${h.load} محطة مرتبطة</div></div></div>
+    <dl><dt>المحطات المرتبطة</dt><dd>${h.load}</dd><dt>الإحداثيات</dt><dd>${h.lat}, ${h.lng}</dd></dl>
+  </div>`;
+}
+$('#q').addEventListener('input',e=>{state.q=e.target.value;applyFilters()});
+$('#themeBtn').onclick=()=>{
+  const cur=document.documentElement.getAttribute('data-theme')
+    || (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light');
+  document.documentElement.setAttribute('data-theme',cur==='dark'?'light':'dark');
+};
+$('#railBtn').onclick=()=>document.body.classList.toggle('railopen');
+
+/* ---- legend ---- */
+function renderLegend(){
+  const counts={};located.forEach(s=>{const k=catOf(s).lbl;counts[k]=(counts[k]||0)+1});
+  const items=Object.entries(CAT).filter(([k])=>counts[CAT[k].lbl]).map(([k,m])=>
+    `<div class="lg ${state.cats.has(k)?'':'off'}" data-cat="${k}"><span class="dot" style="background:${m.c};color:${m.c}"></span>${m.lbl}<span class="cnt">${counts[m.lbl]||0}</span></div>`).join('');
+  $('#legend').innerHTML=`<h4>الشبكة</h4>${items}
+    <div class="lg hublg" style="margin-top:6px;cursor:default"><span class="dm"></span>مركز أرامكو للتوزيع<span class="cnt">${hubs.filter(h=>h.load).length}</span></div>`;
+  document.querySelectorAll('#legend .lg[data-cat]').forEach(el=>el.onclick=()=>{
+    const k=el.dataset.cat;if(state.cats.has(k))state.cats.delete(k);else state.cats.add(k);
+    if(state.cats.size===0)Object.keys(CAT).forEach(x=>state.cats.add(x));
+    renderLegend();renderCats();applyFilters();
+  });
+}
+/* ---- pending: any unit without coordinates (stored + stations) ---- */
+function renderPending(){
+  const rows=[
+    ...DATA.stored.map(s=>({code:s.code,tag:s.project||s.cat,ok:hasLL(s),st:s.status||s.cat})),
+    ...unlocated.filter(s=>s._kind==='station').map(s=>({code:s.code,tag:s.project||'',ok:false,st:'محطة بلا إحداثيات'})),
+  ];
+  const pend=rows.filter(r=>!r.ok);
+  $('#pendHint').textContent=`${rows.length} وحدة · ${pend.length} بانتظار الإحداثيات`;
+  $('#pending').innerHTML=rows.map(r=>`<li><span>${r.code}${r.tag?' · '+r.tag:''}</span><span class="st">${r.ok?'محددة ✓':r.st}</span></li>`).join('');
+  $('#pendNote').textContent=pend.length?`${pend.length} وحدة لها رابط موقع مختصر فقط دون إحداثيات — بإضافة إحداثياتها تظهر تلقائياً على الشبكة.`:'كل الوحدات محددة الموقع.';
+}
+
+/* ---- boot ---- */
+$('#pUpd').textContent=(()=>{try{return new Date(DATA.meta.updated).toLocaleDateString('ar-SA-u-ca-gregory',{year:'numeric',month:'long',day:'numeric'})}catch(e){return DATA.meta.updated}})();
+$('#pVer').textContent=DATA.meta.version||'—';
+renderKpis(null);renderCats();renderProj();renderHubbar();renderLegend();renderPending();
+$('#detail').innerHTML=`<div class="empty"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>اختر محطة أو مركزاً على الشبكة لعرض تفاصيله</div>`;
+applyFilters();
+</script>
