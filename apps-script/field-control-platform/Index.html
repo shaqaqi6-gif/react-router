@@ -27,6 +27,9 @@
   --topbar-h:64px;--sidebar-w:264px;--sidebar-w-min:84px;
 }
 *,*:before,*:after{box-sizing:border-box}
+/* V8.3.1: أي قاعدة display في التنسيق تتغلّب على خاصية hidden في متصفح المستخدم،
+   فظهرت شارة الجرس وهي صفر. هذه القاعدة تحسم الأمر لكل عنصر مخفي في المنصة. */
+[hidden]{display:none!important}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{margin:0;font-family:var(--font);background:var(--bg);color:var(--ink);font-size:14px;line-height:1.55;overflow-x:hidden;-webkit-font-smoothing:antialiased}
 button,input,select,textarea{font:inherit;color:inherit}
@@ -731,7 +734,7 @@ input[type="file"]{width:100%}
 }
 /* V8.2.2 — كناري اكتمال اللصق: آخر قاعدة في الملف.
    لو وصل Index ناقصًا فلن تُعرّف هذه الخاصية، وتكشفها الواجهة عند الدخول. */
-:root{--ui-css-complete:1}
+:root{--ui-css-complete:1;--ui-version:"8.3.1"}
 @media print{
   .topbar,.sidebar,.footer-actions,.page-actions,.btn{display:none!important}
   .workspace{display:block;padding:0}
