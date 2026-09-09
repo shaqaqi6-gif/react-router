@@ -63,6 +63,40 @@ h1,h2,h3{font-weight:700;letter-spacing:-.01em}
 .login-points{display:grid;gap:10px;margin-top:26px}
 .login-points div{display:flex;align-items:center;gap:10px;font-size:13px;opacity:.95}
 .login-points span{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-weight:700;flex:none}
+/* ===== V9.0.0: المشهد المتحرك في شاشة الدخول ===== */
+.login-scene{margin-top:18px;position:relative;touch-action:manipulation;user-select:none}
+.scene-svg{width:100%;height:auto;display:block;overflow:visible}
+.scene-layer{transition:transform .35s cubic-bezier(.2,.7,.2,1);will-change:transform}
+.scene-route{stroke:rgba(255,255,255,.18);stroke-width:2;stroke-dasharray:4 6}
+.scene-route-draw{stroke:#7FDBFF;stroke-width:2.5;stroke-linecap:round;stroke-dasharray:420;stroke-dashoffset:420;animation:sceneDraw 7s linear infinite}
+@keyframes sceneDraw{0%{stroke-dashoffset:420}85%,100%{stroke-dashoffset:0}}
+.scene-pin{cursor:pointer;transition:transform .25s}
+.scene-pin .pin-core{fill:#fff;stroke:#009DDF;stroke-width:3;transition:fill .2s,stroke .2s}
+.scene-pin .pin-ring{fill:none;stroke:#7FDBFF;stroke-width:2;opacity:0;transform-origin:center;transform-box:fill-box;animation:pinPulse 2.4s ease-out infinite}
+.scene-pin:nth-of-type(2) .pin-ring{animation-delay:.8s}.scene-pin:nth-of-type(3) .pin-ring{animation-delay:1.6s}
+.scene-pin:hover .pin-core,.scene-pin.active .pin-core{fill:#009DDF;stroke:#fff}
+.scene-pin.active .pin-ring{animation-duration:1.2s;stroke:#fff}
+@keyframes pinPulse{0%{transform:scale(.35);opacity:.9}100%{transform:scale(1.6);opacity:0}}
+.scene-card rect:first-child{fill:rgba(255,255,255,.12);stroke:rgba(255,255,255,.28);stroke-width:1}
+.scene-card{animation:sceneFloat 5s ease-in-out infinite}
+.card-kpi{animation-delay:-2.5s}
+@keyframes sceneFloat{0%,100%{translate:0 0}50%{translate:0 -6px}}
+.card-title{fill:#fff;font-size:11px;font-weight:700;text-anchor:end;font-family:var(--font)}
+.check-row rect{fill:rgba(255,255,255,.35)}
+.check-row circle{fill:none;stroke:rgba(255,255,255,.55);stroke-width:1.5;animation:checkFill 7s infinite;animation-delay:calc(1.4s + var(--i)*1.2s)}
+.check-row path{fill:none;stroke:#fff;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:12;stroke-dashoffset:12;animation:checkTick 7s infinite;animation-delay:calc(1.6s + var(--i)*1.2s)}
+@keyframes checkFill{0%,5%{fill:none;stroke:rgba(255,255,255,.55)}12%,88%{fill:#1FC27A;stroke:#1FC27A}100%{fill:none;stroke:rgba(255,255,255,.55)}}
+@keyframes checkTick{0%,5%{stroke-dashoffset:12}12%,88%{stroke-dashoffset:0}100%{stroke-dashoffset:12}}
+.kpi-bars rect{fill:url(#sceneBar);transform-origin:50% 100%;transform-box:fill-box;animation:barGrow 7s ease-out infinite;animation-delay:calc(.4s + var(--i)*.18s)}
+@keyframes barGrow{0%{transform:scaleY(.15)}25%,90%{transform:scaleY(calc(var(--h)/38))}100%{transform:scaleY(.15)}}
+.scene-stamp{transform-box:fill-box;transform-origin:center;opacity:0;animation:stampPop 7s cubic-bezier(.2,1.4,.4,1) infinite}
+.scene-stamp rect{fill:#1FC27A}.scene-stamp path{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
+.scene-stamp text{fill:#fff;font-size:12px;font-weight:700;font-family:var(--font)}
+@keyframes stampPop{0%,72%{opacity:0;transform:scale(.4) rotate(-8deg)}78%{opacity:1;transform:scale(1.1) rotate(2deg)}82%,96%{opacity:1;transform:scale(1) rotate(0)}100%{opacity:0;transform:scale(.9)}}
+.scene-caption{display:flex;align-items:baseline;gap:10px;margin-top:10px;font-size:13px;min-height:22px}
+.scene-caption strong{font-size:14px}.scene-caption span{opacity:.8;transition:opacity .3s}
+.scene-caption.flip span{animation:captionFlip .45s}
+@keyframes captionFlip{0%{opacity:0;translate:0 6px}100%{opacity:.8;translate:0 0}}
 .login-brand small{opacity:.65;font-size:11px}
 .login-form{padding:48px 44px;display:flex;flex-direction:column;justify-content:center}
 .login-title{margin:0;color:var(--dark);font-size:24px}
@@ -625,6 +659,7 @@ td strong{color:var(--dark);font-weight:600}
   .login-brand{min-height:0;padding:28px 26px}
   .login-brand h2{font-size:22px;margin-top:18px}
   .login-points{display:none}
+  .login-scene{max-width:420px;margin:12px auto 0}.scene-svg{max-height:170px}
   .login-form{padding:30px 26px}
 }
 @media (max-width:680px){
@@ -765,6 +800,8 @@ input[type="file"]{width:100%}
 
 @media (prefers-reduced-motion:reduce){
   .tap-ring,.tap-dot{display:none!important}
+  .scene-route-draw,.scene-card,.check-row circle,.check-row path,.kpi-bars rect,.scene-stamp,.scene-pin .pin-ring,.scene-layer{animation:none!important;transition:none!important}
+  .scene-route-draw{stroke-dashoffset:0}.scene-stamp{opacity:1}.check-row circle{fill:#1FC27A;stroke:#1FC27A}.check-row path{stroke-dashoffset:0}.scene-pin .pin-ring{opacity:.5;transform:scale(1)}
   .page.page-enter>*,.modal,.modal-backdrop,.modal-backdrop.closing,.modal-backdrop.closing .modal,.nav-btn.active:after,.decision button.selected{animation:none!important}
   .btn:active,.icon-btn:active,.nav-btn:active,.kpi:active,.station-card:active,.visit-type:active,.dash-decision-row:active,.dash-scope-stat:active,.bar-row:active,.decision button:active,.top-logo-home:active{transform:none!important}
 }
@@ -787,11 +824,51 @@ input[type="file"]{width:100%}
         <div>
           <img class="brand-logo" alt="شعار شركة الدريس" data-aldrees-logo>
           <h2>منصة الرقابة<br>والزيارات الميدانية</h2>
-          <p>زيارات ميدانية موثقة بالموقع، اعتماد إداري، ومتابعة الملاحظات حتى الإغلاق — لكل محطات الدريس.</p>
-          <div class="login-points">
-            <div><span>✓</span> زيارات ميدانية بموقع GPS وصور موثّقة</div>
-            <div><span>✓</span> اعتماد ورفض مع إشعار فوري للمشرف</div>
-            <div><span>✓</span> مؤشرات أداء المشرفين والمحطات</div>
+          <!-- V9.0.0: مشهد متحرك تفاعلي بدل النص التسويقي — المس محطة لتتبع الرحلة -->
+          <div class="login-scene" id="loginScene" aria-hidden="true">
+            <svg class="scene-svg" viewBox="0 0 420 250" preserveAspectRatio="xMidYMid meet">
+              <defs>
+                <pattern id="sceneGrid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M28 0H0V28" fill="none" stroke="rgba(255,255,255,.09)" stroke-width="1"/></pattern>
+                <linearGradient id="sceneBar" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#009DDF"/><stop offset="1" stop-color="#7FDBFF"/></linearGradient>
+                <filter id="sceneGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="3" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
+              </defs>
+              <rect width="420" height="250" fill="url(#sceneGrid)" rx="16"/>
+              <g class="scene-layer" data-depth="1">
+                <path id="sceneRoute" class="scene-route" d="M62 176 C 110 120, 150 200, 196 132 S 300 70, 348 104" fill="none"/>
+                <path class="scene-route-draw" d="M62 176 C 110 120, 150 200, 196 132 S 300 70, 348 104" fill="none"/>
+                <g class="scene-pin" data-station="محطة الواحة" transform="translate(62 176)"><circle class="pin-ring" r="14"/><circle class="pin-core" r="6"/></g>
+                <g class="scene-pin" data-station="محطة النخيل" transform="translate(196 132)"><circle class="pin-ring" r="14"/><circle class="pin-core" r="6"/></g>
+                <g class="scene-pin" data-station="محطة الخليج" transform="translate(348 104)"><circle class="pin-ring" r="14"/><circle class="pin-core" r="6"/></g>
+                <g class="scene-walker" filter="url(#sceneGlow)"><circle r="7" fill="#fff"/><circle r="3" fill="#009DDF"/>
+                  <animateMotion dur="7s" repeatCount="indefinite" rotate="auto" keyPoints="0;1" keyTimes="0;1" calcMode="linear"><mpath href="#sceneRoute"/></animateMotion>
+                </g>
+              </g>
+              <g class="scene-layer" data-depth="2">
+                <g class="scene-card card-check" transform="translate(228 150)">
+                  <rect width="160" height="78" rx="12"/>
+                  <text x="148" y="20" class="card-title">قائمة التحقق</text>
+                  <g class="check-row" style="--i:0"><circle cx="146" cy="38" r="6"/><path d="M143 38l2 2 4-4"/><rect x="40" y="35" width="94" height="5" rx="2.5"/></g>
+                  <g class="check-row" style="--i:1"><circle cx="146" cy="53" r="6"/><path d="M143 53l2 2 4-4"/><rect x="60" y="50" width="74" height="5" rx="2.5"/></g>
+                  <g class="check-row" style="--i:2"><circle cx="146" cy="68" r="6"/><path d="M143 68l2 2 4-4"/><rect x="50" y="65" width="84" height="5" rx="2.5"/></g>
+                </g>
+                <g class="scene-card card-kpi" transform="translate(30 22)">
+                  <rect width="118" height="76" rx="12"/>
+                  <text x="106" y="20" class="card-title">مؤشرات الأداء</text>
+                  <g class="kpi-bars">
+                    <rect x="18" y="30" width="12" height="38" rx="3" style="--h:38;--i:0"/>
+                    <rect x="38" y="30" width="12" height="38" rx="3" style="--h:24;--i:1"/>
+                    <rect x="58" y="30" width="12" height="38" rx="3" style="--h:31;--i:2"/>
+                    <rect x="78" y="30" width="12" height="38" rx="3" style="--h:18;--i:3"/>
+                    <rect x="98" y="30" width="12" height="38" rx="3" style="--h:35;--i:4"/>
+                  </g>
+                </g>
+                <g class="scene-stamp" transform="translate(300 40)">
+                  <rect x="-44" y="-16" width="88" height="32" rx="16"/>
+                  <path d="M-24 0l8 8 16-16"/><text x="14" y="5">معتمدة</text>
+                </g>
+              </g>
+            </svg>
+            <div class="scene-caption"><strong id="sceneStation">محطة الواحة</strong><span id="sceneStep">زيارة موثّقة بالموقع</span></div>
           </div>
         </div>
         <small>نظام داخلي — شركة الدريس للخدمات البترولية والنقليات</small>
@@ -918,6 +995,31 @@ var ALDREES_LOGO_B64 = [
 'OTqQDqSPDqQD6aMD6UD66EA6kD46kA6kT8LfAiLIu4+/M8Q/RaRNl0ov8gkAAAAASUVORK5CYII='
 ].join('').replace(/[^A-Za-z0-9+\/=]/g, '');
 var ALDREES_LOGO_DATA_URI = 'data:image/png;base64,' + ALDREES_LOGO_B64;
+/* V9.0.0: تفاعل مشهد الدخول — ميلان خفيف مع المؤشر، ولمس المحطة يبدّل اسمها، والتعليق يتبع مراحل الرحلة */
+(function(){
+  var scene=document.getElementById('loginScene');if(!scene)return;
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var layers=scene.querySelectorAll('.scene-layer'),pins=scene.querySelectorAll('.scene-pin');
+  var stationEl=document.getElementById('sceneStation'),stepEl=document.getElementById('sceneStep');
+  var steps=['زيارة موثّقة بالموقع','قائمة تحقق وصور','اعتماد مساعد الإشراف','متابعة الملاحظات حتى الإغلاق'];
+  function tilt(x,y){if(reduce)return;layers.forEach(function(l){var d=Number(l.getAttribute('data-depth')||1);l.style.transform='translate('+(x*4*d).toFixed(1)+'px,'+(y*3*d).toFixed(1)+'px)';});}
+  scene.addEventListener('pointermove',function(e){var r=scene.getBoundingClientRect();tilt((e.clientX-r.left)/r.width-.5,(e.clientY-r.top)/r.height-.5);});
+  scene.addEventListener('pointerleave',function(){tilt(0,0);});
+  var i=0;
+  function setPin(idx){pins.forEach(function(p,k){p.classList.toggle('active',k===idx);});stationEl.textContent=pins[idx].getAttribute('data-station');}
+  pins.forEach(function(p,k){p.addEventListener('click',function(){i=k;setPin(k);});});
+  setPin(0);
+  if(!reduce){
+    var t=0;
+    setInterval(function(){
+      var lv=document.getElementById('loginView');if(!lv||lv.classList.contains('hidden'))return;
+      t=(t+1)%steps.length;
+      stepEl.textContent=steps[t];
+      scene.querySelector('.scene-caption').classList.remove('flip');void stepEl.offsetWidth;scene.querySelector('.scene-caption').classList.add('flip');
+      if(t===0){i=(i+1)%pins.length;setPin(i);}
+    },1750);
+  }
+})();
 document.querySelectorAll('[data-aldrees-logo]').forEach(function(img){
   img.onerror = function(){ this.replaceWith(Object.assign(document.createElement('div'), {className:'brand-logo-fallback', textContent:'الدريس'})); };
   img.src = ALDREES_LOGO_DATA_URI;
