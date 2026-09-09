@@ -63,27 +63,38 @@ h1,h2,h3{font-weight:700;letter-spacing:-.01em}
 .login-points{display:grid;gap:10px;margin-top:26px}
 .login-points div{display:flex;align-items:center;gap:10px;font-size:13px;opacity:.95}
 .login-points span{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-weight:700;flex:none}
-/* ===== V9.0.0: مسدس التعبئة في شاشة الدخول — حركة بطيئة هادئة ===== */
-.login-scene{margin-top:10px;margin-bottom:8px;position:relative;user-select:none}
-.scene-svg{width:100%;height:auto;display:block;overflow:visible}
-.scene-layer{transition:transform .6s cubic-bezier(.2,.7,.2,1);will-change:transform}
-.halo{animation:haloBreath 6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
-@keyframes haloBreath{0%,100%{opacity:.6;transform:scale(.94)}50%{opacity:1;transform:scale(1.04)}}
-.hose{stroke:url(#hoseG);stroke-width:14;stroke-linecap:round;opacity:.95}
-.hose-flow{stroke:#7FDBFF;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 26;opacity:.55;animation:hoseFlow 5s linear infinite}
-@keyframes hoseFlow{to{stroke-dashoffset:-80}}
-.nozzle-float{animation:nozzleFloat 6s ease-in-out infinite}
-@keyframes nozzleFloat{0%,100%{translate:0 0}50%{translate:0 -5px}}
-.nozzle{filter:drop-shadow(0 14px 18px rgba(8,30,60,.35))}
-.nz-spout-shadow{stroke:rgba(8,30,60,.25);stroke-width:16;stroke-linecap:round}
-.nz-spout{stroke:url(#nozzleG);stroke-width:16;stroke-linecap:round}
-.nz-spout-hl{stroke:rgba(255,255,255,.45);stroke-width:3;stroke-linecap:round}
-.nz-coupling{fill:#12355F;stroke:rgba(255,255,255,.25)}
-.nz-body,.nz-handle{fill:url(#nozzleG);stroke:rgba(255,255,255,.55);stroke-width:1.2;stroke-linejoin:round}
-.nz-shine{fill:rgba(255,255,255,.4)}
-.nz-guard{stroke:rgba(255,255,255,.85);stroke-width:6;stroke-linecap:round;stroke-linejoin:round}
-.nz-sweep{animation:nozzleSweep 7s ease-in-out infinite;transform:translateX(-40px)}
-@keyframes nozzleSweep{0%,55%{transform:translateX(-40px) skewX(-18deg)}80%,100%{transform:translateX(150px) skewX(-18deg)}}
+/* ===== V9.0.0: قائمة التحقق التفاعلية في شاشة الدخول ===== */
+.login-scene{margin-top:22px;position:relative;user-select:none}
+.clip-card{position:relative;width:min(340px,100%);margin-inline-start:auto;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.28);border-radius:18px;padding:14px 16px 12px;backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px);box-shadow:0 18px 40px rgba(8,30,60,.28);animation:clipFloat 7s ease-in-out infinite;transition:box-shadow .4s}
+.clip-card.done{box-shadow:0 18px 40px rgba(8,30,60,.28),0 0 0 1px rgba(127,219,255,.35)}
+@keyframes clipFloat{0%,100%{translate:0 0}50%{translate:0 -4px}}
+.clip-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.clip-title{display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;color:#fff}
+.clip-dot{width:8px;height:8px;border-radius:50%;background:#7FDBFF;box-shadow:0 0 0 0 rgba(127,219,255,.6);animation:clipDot 2.8s ease-out infinite}
+@keyframes clipDot{0%{box-shadow:0 0 0 0 rgba(127,219,255,.55)}100%{box-shadow:0 0 0 9px rgba(127,219,255,0)}}
+.clip-ring{position:relative;width:44px;height:44px}
+.clip-ring svg{width:44px;height:44px;transform:rotate(-90deg)}
+.ring-track{fill:none;stroke:rgba(255,255,255,.18);stroke-width:4}
+.ring-fill{fill:none;stroke:#7FDBFF;stroke-width:4;stroke-linecap:round;stroke-dasharray:113;stroke-dashoffset:113;transition:stroke-dashoffset .6s cubic-bezier(.2,.7,.2,1)}
+.clip-ring span{position:absolute;inset:0;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff;font-variant-numeric:tabular-nums}
+.clip-list{list-style:none;margin:0;padding:0;display:grid;gap:6px}
+.clip-item{display:grid;grid-template-columns:22px 1fr 54px;align-items:center;gap:10px;padding:7px 8px;border-radius:11px;cursor:pointer;transition:background .25s,transform .25s;position:relative}
+.clip-item:hover{background:rgba(255,255,255,.08)}
+.clip-item:active{transform:scale(.985)}
+.clip-check{width:22px;height:22px;border-radius:50%;border:1.6px solid rgba(255,255,255,.55);display:grid;place-items:center;transition:background .3s,border-color .3s,transform .3s;background:transparent}
+.clip-check svg{width:13px;height:13px;fill:none;stroke:#0F2A50;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:16;stroke-dashoffset:16;transition:stroke-dashoffset .35s ease .05s}
+.clip-item.on .clip-check{background:#7FDBFF;border-color:#7FDBFF;transform:scale(1.06)}
+.clip-item.on .clip-check svg{stroke-dashoffset:0}
+.clip-item.on .clip-check:after{content:"";position:absolute;inset-inline-start:8px;top:7px;width:22px;height:22px;border-radius:50%;border:1.5px solid rgba(127,219,255,.7);animation:checkRipple .6s ease-out forwards;pointer-events:none}
+@keyframes checkRipple{0%{transform:scale(.6);opacity:.9}100%{transform:scale(2);opacity:0}}
+.clip-label{font-size:12.5px;color:#fff;transition:opacity .3s}
+.clip-item.on .clip-label{opacity:.7}
+.clip-bar{height:5px;border-radius:3px;background:rgba(255,255,255,.14);overflow:hidden}
+.clip-bar i{display:block;height:100%;width:0;border-radius:3px;background:linear-gradient(90deg,#009DDF,#7FDBFF);transition:width .7s cubic-bezier(.2,.7,.2,1)}
+.clip-item.on .clip-bar i{width:var(--w)}
+.clip-seal{position:absolute;top:-14px;inset-inline-start:-14px;width:40px;height:40px;border-radius:50%;background:#1FC27A;box-shadow:0 8px 18px rgba(0,0,0,.25);display:grid;place-items:center;opacity:0;transform:scale(.4) rotate(-12deg);transition:opacity .3s,transform .5s cubic-bezier(.2,1.5,.4,1);pointer-events:none}
+.clip-seal svg{width:22px;height:22px;fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.clip-card.done .clip-seal{opacity:1;transform:scale(1) rotate(0)}
 .login-brand small{opacity:.65;font-size:11px}
 .login-form{padding:48px 44px;display:flex;flex-direction:column;justify-content:center}
 .login-title{margin:0;color:var(--dark);font-size:24px}
@@ -646,7 +657,7 @@ td strong{color:var(--dark);font-weight:600}
   .login-brand{min-height:0;padding:28px 26px}
   .login-brand h2{font-size:22px;margin-top:18px}
   .login-points{display:none}
-  .login-scene{max-width:360px;margin:6px auto 0}.scene-svg{max-height:150px}
+  .login-scene{margin:14px 0 0}.clip-card{margin:0 auto}.clip-list{gap:3px}.clip-item{padding:5px 8px}
   .login-form{padding:30px 26px}
 }
 @media (max-width:680px){
@@ -787,8 +798,7 @@ input[type="file"]{width:100%}
 
 @media (prefers-reduced-motion:reduce){
   .tap-ring,.tap-dot{display:none!important}
-  .halo,.hose-flow,.nozzle-float,.nz-sweep,.scene-layer{animation:none!important;transition:none!important}
-  .nz-sweep{display:none}
+  .clip-card,.clip-dot,.clip-item.on .clip-check:after{animation:none!important}
   .page.page-enter>*,.modal,.modal-backdrop,.modal-backdrop.closing,.modal-backdrop.closing .modal,.nav-btn.active:after,.decision button.selected{animation:none!important}
   .btn:active,.icon-btn:active,.nav-btn:active,.kpi:active,.station-card:active,.visit-type:active,.dash-decision-row:active,.dash-scope-stat:active,.bar-row:active,.decision button:active,.top-logo-home:active{transform:none!important}
 }
@@ -811,35 +821,25 @@ input[type="file"]{width:100%}
         <div>
           <img class="brand-logo" alt="شعار شركة الدريس" data-aldrees-logo>
           <h2>منصة الرقابة<br>والزيارات الميدانية</h2>
-          <!-- V9.0.0: مسدس تعبئة أزرق بحركة هادئة — بلا نص -->
+          <!-- V9.0.0: قائمة تحقق تفاعلية هادئة — المس بندًا لتعليمه، وتُعلَّم وحدها إن تُركت -->
           <div class="login-scene" id="loginScene" aria-hidden="true">
-            <svg class="scene-svg" viewBox="0 0 420 250" preserveAspectRatio="xMidYMid meet">
-              <defs>
-                <linearGradient id="nozzleG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3EC6F7"/><stop offset="1" stop-color="#0079BC"/></linearGradient>
-                <linearGradient id="hoseG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0F2A50"/><stop offset="1" stop-color="#1A3F73"/></linearGradient>
-                <radialGradient id="haloG"><stop offset="0" stop-color="#7FDBFF" stop-opacity=".35"/><stop offset="1" stop-color="#7FDBFF" stop-opacity="0"/></radialGradient>
-                <linearGradient id="sweepG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".45"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
-                <clipPath id="nozzleClip"><rect x="146" y="84" width="96" height="46" rx="18"/><path d="M206 130 v40 q0 14 14 14 h6 q14 0 14 -14 v-40 z"/></clipPath>
-              </defs>
-              <circle class="halo" cx="200" cy="130" r="120" fill="url(#haloG)"/>
-              <g class="scene-layer" data-depth="1">
-                <path class="hose" d="M256 108 C 300 108, 318 140, 326 180 S 372 236, 414 216" fill="none"/>
-                <path class="hose-flow" d="M256 108 C 300 108, 318 140, 326 180 S 372 236, 414 216" fill="none"/>
-              </g>
-              <g class="scene-layer nozzle-float" data-depth="2">
-                <g class="nozzle" transform="rotate(-10 200 125)">
-                  <path class="nz-spout-shadow" d="M150 107 H96 q-14 0 -14 14 v20" fill="none"/>
-                  <path class="nz-spout" d="M150 104 H96 q-14 0 -14 14 v18" fill="none"/>
-                  <path class="nz-spout-hl" d="M146 99 H98" fill="none"/>
-                  <rect class="nz-coupling" x="236" y="94" width="22" height="28" rx="7"/>
-                  <rect class="nz-body" x="146" y="84" width="96" height="46" rx="18"/>
-                  <rect class="nz-shine" x="162" y="93" width="48" height="7" rx="3.5"/>
-                  <path class="nz-handle" d="M206 130 v40 q0 14 14 14 h6 q14 0 14 -14 v-40 z"/>
-                  <path class="nz-guard" d="M176 130 v20 q0 12 12 12 h18" fill="none"/>
-                  <rect class="nz-sweep" x="120" y="60" width="40" height="140" fill="url(#sweepG)" clip-path="url(#nozzleClip)"/>
-                </g>
-              </g>
-            </svg>
+            <div class="clip-card" id="clipCard">
+              <div class="clip-head">
+                <div class="clip-title"><span class="clip-dot"></span>قائمة التحقق</div>
+                <div class="clip-ring">
+                  <svg viewBox="0 0 44 44"><circle class="ring-track" cx="22" cy="22" r="18"/><circle class="ring-fill" id="clipRing" cx="22" cy="22" r="18"/></svg>
+                  <span id="clipPct">0%</span>
+                </div>
+              </div>
+              <ul class="clip-list" id="clipList">
+                <li class="clip-item" data-i="0"><span class="clip-check"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg></span><span class="clip-label">السلامة والحريق</span><span class="clip-bar"><i style="--w:92%"></i></span></li>
+                <li class="clip-item" data-i="1"><span class="clip-check"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg></span><span class="clip-label">المضخات والخراطيم</span><span class="clip-bar"><i style="--w:78%"></i></span></li>
+                <li class="clip-item" data-i="2"><span class="clip-check"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg></span><span class="clip-label">النظافة العامة</span><span class="clip-bar"><i style="--w:85%"></i></span></li>
+                <li class="clip-item" data-i="3"><span class="clip-check"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg></span><span class="clip-label">اللوحات الإرشادية</span><span class="clip-bar"><i style="--w:64%"></i></span></li>
+                <li class="clip-item" data-i="4"><span class="clip-check"><svg viewBox="0 0 16 16"><path d="M3.5 8.5l3 3 6-7"/></svg></span><span class="clip-label">دورات المياه</span><span class="clip-bar"><i style="--w:70%"></i></span></li>
+              </ul>
+              <div class="clip-seal" id="clipSeal"><svg viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+            </div>
           </div>
         </div>
         <small>نظام داخلي — شركة الدريس للخدمات البترولية والنقليات</small>
@@ -966,14 +966,29 @@ var ALDREES_LOGO_B64 = [
 'OTqQDqSPDqQD6aMD6UD66EA6kD46kA6kT8LfAiLIu4+/M8Q/RaRNl0ov8gkAAAAASUVORK5CYII='
 ].join('').replace(/[^A-Za-z0-9+\/=]/g, '');
 var ALDREES_LOGO_DATA_URI = 'data:image/png;base64,' + ALDREES_LOGO_B64;
-/* V9.0.0: مسدس التعبئة — ميلان خفيف جدًا مع حركة المؤشر، لا أكثر */
+/* V9.0.0: قائمة التحقق التفاعلية — المس بندًا لتعليمه أو إلغائه؛ وإن تُركت تُعلَّم بنودها واحدًا واحدًا بهدوء،
+   وعند اكتمالها يظهر ختم الاعتماد ثم تعود للبداية. أي لمسة توقف التعليم التلقائي ثماني ثوانٍ. */
 (function(){
-  var scene=document.getElementById('loginScene');if(!scene)return;
-  if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches)return;
-  var layers=scene.querySelectorAll('.scene-layer');
-  function tilt(x,y){layers.forEach(function(l){var d=Number(l.getAttribute('data-depth')||1);l.style.transform='translate('+(x*3*d).toFixed(1)+'px,'+(y*2*d).toFixed(1)+'px)';});}
-  scene.addEventListener('pointermove',function(e){var r=scene.getBoundingClientRect();tilt((e.clientX-r.left)/r.width-.5,(e.clientY-r.top)/r.height-.5);});
-  scene.addEventListener('pointerleave',function(){tilt(0,0);});
+  var card=document.getElementById('clipCard');if(!card)return;
+  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
+  var items=Array.prototype.slice.call(card.querySelectorAll('.clip-item')),ring=document.getElementById('clipRing'),pct=document.getElementById('clipPct');
+  var timer=null,holdUntil=0;
+  function paint(){
+    var n=items.filter(function(i){return i.classList.contains('on')}).length,r=n/items.length;
+    ring.style.strokeDashoffset=String(113-113*r);pct.textContent=Math.round(r*100)+'%';
+    card.classList.toggle('done',n===items.length);
+  }
+  function loginVisible(){var lv=document.getElementById('loginView');return lv&&!lv.classList.contains('hidden');}
+  function auto(){
+    if(!loginVisible()||Date.now()<holdUntil)return;
+    var next=items.filter(function(i){return !i.classList.contains('on')})[0];
+    if(next){next.classList.add('on');paint();}
+    else{setTimeout(function(){if(Date.now()<holdUntil)return;items.forEach(function(i){i.classList.remove('on')});paint();},2600);}
+  }
+  items.forEach(function(it){it.addEventListener('click',function(){holdUntil=Date.now()+8000;it.classList.toggle('on');paint();});});
+  paint();
+  if(!reduce)timer=setInterval(auto,2100);
+  else{items.forEach(function(i){i.classList.add('on')});paint();}
 })();
 document.querySelectorAll('[data-aldrees-logo]').forEach(function(img){
   img.onerror = function(){ this.replaceWith(Object.assign(document.createElement('div'), {className:'brand-logo-fallback', textContent:'الدريس'})); };
