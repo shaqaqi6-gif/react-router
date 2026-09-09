@@ -1,6 +1,6 @@
 /* =====================================================================
    Visits.gs — الزيارات، الاعتماد، GPS، الملاحظات، الخطط والمتابعة
-   V8.2.3 · شركة الدريس
+   V8.3.0 · شركة الدريس
    ===================================================================== */
 
 function getDashboard(token){
@@ -344,8 +344,15 @@ function approveVisit(token,visitId,approved,comment){
   if(approved){
     updateRowsByKeys_(vsh,{VISIT_ID:visitId},{APPROVAL_STATUS:'APPROVED',APPROVED_BY:session.computerNo,APPROVED_AT:now,APPROVAL_COMMENT:comment,WORKFLOW_STATUS:issues.length?'FOLLOW_UP':'CLOSED'});
     issues.forEach(function(x){const days=Math.max(1,Number(x.DUE_DAYS||settingValue_('ISSUE_DEFAULT_REMEDIATION_DAYS','7'))),due=dateAddDaysKey_(dateKey_(now),days);updateRowsByKeys_(ish,{ISSUE_ID:String(x.ISSUE_ID||'')},{STATUS:'OPEN',APPROVED_AT:now,DUE_DATE:due,DUE_DAYS:days,LAST_UPDATED_AT:now});});
-    let body='تم اعتماد زيارتك '+visitId+'.'; if(issues.length)body+=' لديك '+issues.length+' ملاحظة تبدأ مهلة معالجتها من تاريخ الاعتماد.';
-    notify_(String(v.COMPUTER_NO||''),'VISIT_APPROVED','تم اعتماد الزيارة',body,visitId,session.computerNo);
+    notify_(String(v.COMPUTER_NO||''),'VISIT_APPROVED','تم اعتماد الزيارة','تم اعتماد زيارتك '+visitId+' للمحطة '+String(v.STATION_NAME||v.STATION_NO||'')+'.',visitId,session.computerNo);
+    // V8.3: الملاحظات الجديدة إشعار مستقل — لا تضيع داخل إشعار الاعتماد.
+    if(issues.length){
+      const dues={};issues.forEach(function(x){const d=dateAddDaysKey_(dateKey_(now),Math.max(1,Number(x.DUE_DAYS||7)));dues[d]=true;});
+      const firstDue=Object.keys(dues).sort()[0]||'';
+      notify_(String(v.COMPUTER_NO||''),'ISSUES_OPENED','لديك '+issues.length+' ملاحظة جديدة للمعالجة',
+        'فُتحت '+issues.length+' ملاحظة من زيارة '+String(v.STATION_NAME||v.STATION_NO||'')+' وبدأت مهلة معالجتها اليوم'+(firstDue?(' — أقربها ينتهي '+firstDue):'')+'.',
+        visitId,session.computerNo);
+    }
   }else{
     updateRowsByKeys_(vsh,{VISIT_ID:visitId},{APPROVAL_STATUS:'REJECTED',APPROVED_BY:session.computerNo,APPROVED_AT:now,APPROVAL_COMMENT:comment,WORKFLOW_STATUS:'REJECTED'});
     issues.forEach(function(x){updateRowsByKeys_(ish,{ISSUE_ID:String(x.ISSUE_ID||'')},{STATUS:'CANCELED',LAST_UPDATED_AT:now});});
@@ -467,6 +474,65 @@ function gpsDistance_(lat1,lon1,lat2,lon2){const R=6371000,toRad=function(x){ret
 function notify_(computerNo,type,title,body,reference,createdBy){if(!computerNo)return;appendObject_(getDb_().getSheetByName(APP.SHEETS.NOTIFICATIONS),{NOTIFICATION_ID:'NTF-'+Utilities.getUuid(),COMPUTER_NO:String(computerNo),TYPE:String(type||''),TITLE:String(title||''),BODY:String(body||''),REFERENCE:String(reference||''),READ:false,CREATED_AT:new Date(),CREATED_BY:String(createdBy||'SYSTEM')});}
 function getMyNotifications(token,includeRead){const s=requireSession_(token);return sheetObjects_(getDb_().getSheetByName(APP.SHEETS.NOTIFICATIONS)).filter(function(n){return String(n.COMPUTER_NO||'')===s.computerNo&&(includeRead||!toBool_(n.READ));}).sort(function(a,b){return sortKeyFromValue_(b.CREATED_AT).localeCompare(sortKeyFromValue_(a.CREATED_AT));}).slice(0,50).map(function(n){return{id:String(n.NOTIFICATION_ID||''),type:String(n.TYPE||''),title:String(n.TITLE||''),body:String(n.BODY||''),reference:String(n.REFERENCE||''),read:toBool_(n.READ),createdAt:formatDateTimeSafe_(n.CREATED_AT)};});}
 function markNotificationRead(token,id){const s=requireSession_(token);updateRowsByKeys_(getDb_().getSheetByName(APP.SHEETS.NOTIFICATIONS),{NOTIFICATION_ID:id,COMPUTER_NO:s.computerNo},{READ:true});return{ok:true};}
+
+/* =====================================================================
+   V8.3 — مركز الإشعارات: عدّادات الشارات وتعليم الكل كمقروء
+   الخادم كان يكتب أربعة عشر نوعًا من الإشعارات، ولا يراها إلا المشرف في
+   صفحته الميدانية. هذه الدوال تغذّي جرس الإشعارات وشارات القائمة لكل مستخدم.
+   ===================================================================== */
+function getBadgeCounts(token){
+  const s=requireSession_(token), ss=getDb_();
+  let unread=0;
+  sheetObjects_(ss.getSheetByName(APP.SHEETS.NOTIFICATIONS)).forEach(function(n){
+    if(String(n.COMPUTER_NO||'')===s.computerNo && !toBool_(n.READ))unread++;
+  });
+  let approvals=0;
+  if(hasPermission_(s,'VISIT_APPROVE')){
+    sheetObjects_(ss.getSheetByName(APP.SHEETS.VISITS)).forEach(function(v){
+      if(String(v.APPROVAL_STATUS||'')!=='PENDING')return;
+      if(canApproveVisit_(s,v))approvals++;
+    });
+  }
+  const today=dateKey_(new Date());
+  let myIssues=0,overdue=0,verify=0;
+  const canVerify=hasPermission_(s,'ISSUE_CLOSE')||hasPermission_(s,'VISIT_APPROVE');
+  sheetObjects_(ss.getSheetByName(APP.SHEETS.ISSUES)).forEach(function(x){
+    const st=String(x.STATUS||'');
+    if(['CLOSED','CANCELED','PENDING_APPROVAL'].indexOf(st)!==-1)return;
+    const own=String(x.OWNER_COMPUTER_NO||x.CREATED_BY||'')===s.computerNo;
+    if(own){
+      if(st!=='AWAITING_VERIFICATION'){
+        myIssues++;
+        const d=dateKeyFromValue_(x.DUE_DATE);
+        if(d&&d<today)overdue++;
+      }
+      return;
+    }
+    if(st==='AWAITING_VERIFICATION'&&canVerify){
+      if(s.roleId==='SYSTEM_ADMIN'){verify++;return;}
+      const v=findVisitObjectById_(String(x.VISIT_ID||''));
+      if(v?canApproveVisit_(s,v):issueAllowed_(s,x))verify++;
+    }
+  });
+  return {unread:unread,approvals:approvals,myIssues:myIssues,overdueIssues:overdue,awaitingVerification:verify};
+}
+
+function markAllNotificationsRead(token){
+  const s=requireSession_(token);
+  const sh=getDb_().getSheetByName(APP.SHEETS.NOTIFICATIONS);
+  const data=sh.getDataRange().getValues();
+  if(data.length<=1)return {ok:true,count:0};
+  const idx=headerMap_(data[0].map(String));
+  if(idx.READ===undefined)return {ok:true,count:0};
+  let count=0;
+  for(let r=1;r<data.length;r++){
+    if(String(data[r][idx.COMPUTER_NO]||'')!==s.computerNo)continue;
+    if(toBool_(data[r][idx.READ]))continue;
+    sh.getRange(r+1,idx.READ+1).setValue(true);count++;
+  }
+  if(count)invalidateSheet_(sh);
+  return {ok:true,count:count};
+}
 
 function getMyIssues(token,filters){const s=requireSession_(token);filters=filters||{};return sheetObjects_(getDb_().getSheetByName(APP.SHEETS.ISSUES)).filter(function(x){const own=String(x.OWNER_COMPUTER_NO||x.CREATED_BY||'')===s.computerNo;if(!own){
   // V8.1.4.7: صلاحية إدارة الملاحظات لا تعني تجاوز النطاق — لا تظهر إلا ملاحظات داخل نطاق المستخدم.
