@@ -84,7 +84,7 @@ textarea.control{min-height:96px;resize:vertical;line-height:1.7}
 
 /* ---------- buttons ---------- */
 .btn{border:1px solid transparent;border-radius:var(--r-sm);padding:10px 16px;font-weight:600;display:inline-flex;align-items:center;justify-content:center;gap:8px;min-height:44px;transition:background .15s,border-color .15s,box-shadow .15s,transform .12s;white-space:nowrap}
-.btn:active{transform:translateY(1px)}
+.btn:active:not(:disabled){transform:scale(.965)}
 .btn:disabled{opacity:.55;cursor:not-allowed;transform:none}
 .btn:focus-visible,.icon-btn:focus-visible,.nav-btn:focus-visible{outline:3px solid rgba(0,157,223,.28);outline-offset:2px}
 .btn-primary{background:var(--blue);color:#fff;box-shadow:0 6px 16px rgba(0,157,223,.22)}
@@ -106,7 +106,7 @@ textarea.control{min-height:96px;resize:vertical;line-height:1.7}
 .topbar-inner{max-width:1600px;margin:auto;height:100%;padding:0 20px;display:flex;align-items:center;justify-content:space-between;gap:16px}
 .top-brand{display:flex;align-items:center;gap:14px;min-width:0}
 .top-logo-home{border:0;background:transparent;padding:2px;border-radius:10px;display:grid;place-items:center;cursor:pointer;flex:none;transition:background .15s,transform .12s}
-.top-logo-home:hover{background:var(--blue-50)}.top-logo-home:active{transform:translateY(1px)}
+.top-logo-home:hover{background:var(--blue-50)}.top-logo-home:active{transform:scale(.93)}
 .top-logo-home img{width:104px;height:auto;max-height:44px;object-fit:contain;display:block}
 .top-title{border-right:1px solid var(--line);padding-right:14px;min-width:0}
 .top-title strong{display:block;color:var(--dark);font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -160,7 +160,16 @@ body.sidebar-collapsed .sidebar-foot{justify-content:center}
 
 /* ---------- page ---------- */
 .page{min-width:0;padding-bottom:64px}
-.page.page-enter{animation:pageEnter .28s cubic-bezier(.2,.8,.2,1)}
+/* V8.1.4.9 — حركة دخول متتابعة: كل قسم يظهر بعد الذي قبله بفارق بسيط
+   حتى يُدرك المستخدم أن الشاشة تغيّرت فعلاً لا أنها ومضت فقط. */
+.page.page-enter>*{animation:pageEnter .34s cubic-bezier(.2,.85,.25,1) backwards}
+.page.page-enter>*:nth-child(1){animation-delay:0ms}
+.page.page-enter>*:nth-child(2){animation-delay:45ms}
+.page.page-enter>*:nth-child(3){animation-delay:90ms}
+.page.page-enter>*:nth-child(4){animation-delay:130ms}
+.page.page-enter>*:nth-child(5){animation-delay:165ms}
+.page.page-enter>*:nth-child(6){animation-delay:195ms}
+.page.page-enter>*:nth-child(n+7){animation-delay:220ms}
 .page-head{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:2px 0 18px}
 .page-head h1{margin:0;color:var(--dark);font-size:24px;line-height:1.3}
 .page-head p{margin:5px 0 0;color:var(--muted);font-size:13px}
@@ -210,6 +219,17 @@ body.sidebar-collapsed .sidebar-foot{justify-content:center}
 .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:12px}
 .empty{padding:32px 14px;border:1px dashed var(--line-strong);border-radius:var(--r-md);text-align:center;color:var(--muted);margin-top:12px;font-size:13px;background:var(--surface-2)}
 .loading{padding:38px;text-align:center;color:var(--muted);font-size:13px}
+/* أثر النقر — عنصران مؤقتان فوق الصفحة، لا يلمسان تنسيق العنصر المضغوط */
+.tap-ring{position:fixed;z-index:400;pointer-events:none;border:2px solid var(--blue);background:transparent;animation:tapRing .42s cubic-bezier(.2,.8,.2,1) forwards}
+.tap-dot{position:fixed;z-index:400;pointer-events:none;width:16px;height:16px;margin:-8px 0 0 -8px;border-radius:50%;background:var(--blue);animation:tapDot .5s cubic-bezier(.2,.75,.3,1) forwards}
+.tap-ring.warm{border-color:var(--warn)}.tap-dot.warm{background:var(--warn)}
+.tap-ring.danger{border-color:var(--bad)}.tap-dot.danger{background:var(--bad)}
+.tap-ring.good{border-color:var(--ok)}.tap-dot.good{background:var(--ok)}
+/* ضغط واضح على كل عنصر قابل للنقر */
+.icon-btn:active,.nav-btn:active,.kpi:active,.station-card:active,.visit-type:active:not(:disabled),.dash-scope-stat:active,.bar-row:active,.decision button:active,.password-toggle:active,.modal-close:active{transform:scale(.965)}
+.nav-btn,.kpi,.station-card,.bar-row,.dash-scope-stat{transition:background .15s,color .15s,border-color .15s,box-shadow .15s,transform .12s cubic-bezier(.2,.8,.2,1)}
+.nav-btn.active:after{animation:navMark .3s cubic-bezier(.2,.85,.25,1)}
+.decision button.selected{animation:decisionPop .32s cubic-bezier(.2,.8,.2,1)}
 .spinner{width:28px;height:28px;border:3px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;margin:0 auto 10px}
 
 /* ---------- KPI cards ---------- */
@@ -376,7 +396,9 @@ td strong{color:var(--dark);font-weight:600}
 .role-chips .badge{font-size:10px;padding:3px 7px}
 /* ---------- modals / toast ---------- */
 .modal-backdrop{position:fixed;inset:0;background:rgba(17,32,48,.55);backdrop-filter:blur(3px);z-index:120;display:grid;place-items:center;padding:16px;animation:fadeIn .15s ease}
-.modal{width:min(680px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:var(--r-lg);padding:20px;box-shadow:var(--sh-lg);animation:pageEnter .2s ease}
+.modal{width:min(680px,100%);max-height:92vh;overflow:auto;background:#fff;border-radius:var(--r-lg);padding:20px;box-shadow:var(--sh-lg);animation:modalIn .26s cubic-bezier(.2,.9,.25,1)}
+.modal-backdrop.closing{animation:fadeOut .16s ease forwards}
+.modal-backdrop.closing .modal{animation:modalOut .16s ease forwards}
 .modal.wide{width:min(960px,100%)}
 .modal-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:16px}
 .modal-head h3{margin:0;color:var(--dark);font-size:16px}
@@ -405,7 +427,7 @@ td strong{color:var(--dark);font-weight:600}
 .dash-decision-list{display:grid;gap:8px;min-width:0}
 .dash-decision-row{width:100%;border:1px solid var(--line);background:#fff;border-radius:var(--r-sm);padding:10px 11px;display:grid;grid-template-columns:minmax(0,1.55fr) repeat(3,minmax(72px,.52fr));gap:8px;align-items:center;text-align:right;min-width:0;transition:background .15s,border-color .15s,transform .12s,box-shadow .15s}
 .dash-decision-row:hover{background:var(--blue-50);border-color:var(--blue-100);box-shadow:var(--sh-sm)}
-.dash-decision-row:active{transform:translateY(1px)}
+.dash-decision-row:active{transform:scale(.988)}
 .dash-decision-row.compact{grid-template-columns:minmax(0,1.65fr) minmax(80px,.48fr) minmax(96px,.62fr) 24px}
 .dash-decision-main{min-width:0}
 .dash-decision-main strong{display:block;color:var(--dark);font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -472,7 +494,14 @@ td strong{color:var(--dark);font-weight:600}
 }
 
 @keyframes spin{to{transform:rotate(360deg)}}
-@keyframes pageEnter{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@keyframes pageEnter{from{opacity:0;transform:translateY(14px) scale(.994)}to{opacity:1;transform:none}}
+@keyframes tapRing{0%{transform:scale(.97);opacity:.5}100%{transform:scale(1.06);opacity:0}}
+@keyframes tapDot{0%{transform:scale(.35);opacity:.38}100%{transform:scale(8);opacity:0}}
+@keyframes navMark{from{transform:scaleY(.15);opacity:0}to{transform:scaleY(1);opacity:1}}
+@keyframes modalIn{from{opacity:0;transform:translateY(16px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes modalOut{to{opacity:0;transform:translateY(8px) scale(.985)}}
+@keyframes fadeOut{to{opacity:0}}
+@keyframes decisionPop{0%{transform:scale(1)}45%{transform:scale(1.06)}100%{transform:scale(1)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
 
 /* =====================================================================
@@ -636,6 +665,11 @@ input[type="file"]{width:100%}
   .toast{font-size:12px}
 }
 
+@media (prefers-reduced-motion:reduce){
+  .tap-ring,.tap-dot{display:none!important}
+  .page.page-enter>*,.modal,.modal-backdrop,.modal-backdrop.closing,.modal-backdrop.closing .modal,.nav-btn.active:after,.decision button.selected{animation:none!important}
+  .btn:active,.icon-btn:active,.nav-btn:active,.kpi:active,.station-card:active,.visit-type:active,.dash-decision-row:active,.dash-scope-stat:active,.bar-row:active,.decision button:active,.top-logo-home:active{transform:none!important}
+}
 @media print{
   .topbar,.sidebar,.footer-actions,.page-actions,.btn{display:none!important}
   .workspace{display:block;padding:0}
