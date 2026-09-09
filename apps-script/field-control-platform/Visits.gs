@@ -1,6 +1,6 @@
 /* =====================================================================
    Visits.gs — الزيارات، الاعتماد، GPS، الملاحظات، الخطط والمتابعة
-   V8.2.0 · شركة الدريس
+   V8.2.3 · شركة الدريس
    ===================================================================== */
 
 function getDashboard(token){
@@ -166,6 +166,117 @@ function uploadEvidence(token,visitId,itemId,dataUrl,fileName){
   return {ok:true,url:url,fileId:file.getId()};
 }
 
+/* =====================================================================
+   V8.2.3 — تشخيص الاعتماد وإعادة إسناد المعتمِد
+   ===================================================================== */
+
+/* يبني جلسة وهمية لمستخدم بصلاحياته الفعلية، لفحص ما يراه فعلًا. */
+function sessionForUser_(u){
+  const roleId=normalizeRoleId_(u.ROLE_ID||u.ROLE||'SUPERVISOR');
+  return {
+    computerNo:String(u.COMPUTER_NO||''),name:String(u.NAME||''),roleId:roleId,
+    regions:csvArray_(u.REGIONS),stationNos:csvArray_(u.STATION_NOS),
+    scopeMode:normalizeScopeMode_(u.SCOPE_MODE,roleId),
+    permissions:getEffectivePermissions_(String(u.COMPUTER_NO||''),roleId)
+  };
+}
+
+/* سبب تعذّر الاعتماد بالضبط — نفس ترتيب الفحوص في canApproveVisit_ */
+function approvalBlockCause_(session,v){
+  const author=String(v.COMPUTER_NO||''), assigned=String(v.APPROVER_COMPUTER_NO||'');
+  if(session.computerNo===author)return 'هو منفّذ الزيارة — ولا يعتمد أحد زيارته بنفسه';
+  if(session.roleId==='SYSTEM_ADMIN')return '';
+  if(!hasPermission_(session,'VISIT_APPROVE'))return 'لا يملك صلاحية VISIT_APPROVE — ولهذا لا يظهر له قسم «الاعتمادات» في القائمة أصلًا';
+  const selfAssigned=!!assigned&&assigned===author;
+  if(assigned&&!selfAssigned){
+    if(assigned===session.computerNo)return '';
+    if(hasPermission_(session,'VISIT_VIEW_ALL'))return '';
+    if(managerForUser_(assigned)===session.computerNo)return '';
+    return 'الزيارة مُسندة إلى '+assigned+' وهذا المستخدم ليس هو، ولا يملك VISIT_VIEW_ALL، ولا هو مديره';
+  }
+  if(hasPermission_(session,'VISIT_VIEW_ALL'))return '';
+  if(!visitAllowed_(session,v)){
+    return 'الزيارة خارج نطاقه (النطاق='+session.scopeMode+'، مناطقه=['+session.regions.join('،')+']، منطقة الزيارة="'+String(v.REGION||'')+'"'+(String(v.REGION||'')?'':' — عمود المنطقة فارغ في سجل الزيارة')+')';
+  }
+  return '';
+}
+
+/* شغّلها من محرر Apps Script: DIAGNOSE_APPROVALS('رقم الكمبيوتر')
+   تطبع لماذا لا تظهر الاعتمادات لهذا المستخدم، زيارةً زيارة. */
+function DIAGNOSE_APPROVALS(computerNo){
+  requireEditorRun_();
+  computerNo=String(computerNo||'').trim();
+  const u=findUserByComputerNo_(computerNo);
+  if(!u){const e={error:'المستخدم غير موجود: '+computerNo};Logger.log(JSON.stringify(e,null,2));return e;}
+  const session=sessionForUser_(u);
+  const p=session.permissions;
+  const pending=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISITS)).filter(function(v){return String(v.APPROVAL_STATUS||'')==='PENDING';});
+  const out={
+    المستخدم:{رقم:session.computerNo,الاسم:session.name,الدور:session.roleId+' ('+getRoleName_(session.roleId)+')',
+      فعال:toBool_(u.ACTIVE),النطاق:session.scopeMode,المناطق:session.regions,عدد_المحطات:session.stationNos.length,
+      مديره:String(u.MANAGER_COMPUTER_NO||'—'),معتمِده:String(u.APPROVER_COMPUTER_NO||'—')},
+    الصلاحيات_المؤثرة:{VISIT_APPROVE:!!p.VISIT_APPROVE,VISIT_VIEW_ALL:!!p.VISIT_VIEW_ALL,VISIT_VIEW_SCOPE:!!p.VISIT_VIEW_SCOPE},
+    يظهر_له_قسم_الاعتمادات:!!p.VISIT_APPROVE,
+    إجمالي_الزيارات_المعلقة:pending.length,
+    الزيارات:pending.slice(0,50).map(function(v){
+      const cause=approvalBlockCause_(session,v);
+      return {
+        رقم_الزيارة:String(v.VISIT_ID||''),المحطة:String(v.STATION_NO||''),المنطقة:String(v.REGION||'(فارغ)'),
+        نفّذها:String(v.COMPUTER_NO||''),مُسندة_إلى:String(v.APPROVER_COMPUTER_NO||'(بلا إسناد)'),
+        يستطيع_اعتمادها:canApproveVisit_(session,v),
+        السبب:cause||'—'
+      };
+    })
+  };
+  Logger.log(JSON.stringify(out,null,2));
+  return out;
+}
+
+/* مرشحو الاعتماد لزيارة: كل مستخدم فعّال يملك VISIT_APPROVE وليس منفّذ الزيارة. */
+function listApproverCandidates(token,visitId){
+  const s=requireSession_(token);
+  requirePermission_(s,'VISIT_PLAN_MANAGE');
+  const v=findVisitObjectById_(limitText_(normalizeText_(visitId),80));
+  if(!v)throw new Error('الزيارة غير موجودة.');
+  const author=String(v.COMPUTER_NO||''), assigned=String(v.APPROVER_COMPUTER_NO||'');
+  return sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(u){
+    if(!toBool_(u.ACTIVE))return false;
+    if(String(u.COMPUTER_NO||'')===author)return false;
+    const rid=normalizeRoleId_(u.ROLE_ID||u.ROLE||'');
+    if(rid==='SYSTEM_ADMIN')return true;
+    return !!getEffectivePermissions_(String(u.COMPUTER_NO||''),rid).VISIT_APPROVE;
+  }).map(function(u){
+    const rid=normalizeRoleId_(u.ROLE_ID||u.ROLE||'');
+    return{computerNo:String(u.COMPUTER_NO||''),name:String(u.NAME||''),roleName:getRoleName_(rid),
+      current:String(u.COMPUTER_NO||'')===assigned};
+  }).sort(function(a,b){return a.name.localeCompare(b.name,'ar');});
+}
+
+/* إعادة إسناد المعتمِد لزيارة معلّقة — يفكّ الزيارات العالقة لدى الشخص الخطأ. */
+function adminReassignApprover(token,visitId,approverComputerNo){
+  const s=requireSession_(token);
+  requirePermission_(s,'VISIT_PLAN_MANAGE');
+  visitId=limitText_(normalizeText_(visitId),80);
+  approverComputerNo=limitText_(normalizeText_(approverComputerNo),32);
+  const v=findVisitObjectById_(visitId);
+  if(!v)throw new Error('الزيارة غير موجودة.');
+  if(String(v.APPROVAL_STATUS||'')!=='PENDING')throw new Error('لا يمكن تغيير معتمِد زيارة تم اتخاذ قرار بشأنها.');
+  if(approverComputerNo===String(v.COMPUTER_NO||''))throw new Error('لا يمكن إسناد الزيارة إلى منفّذها.');
+  const u=findUserByComputerNo_(approverComputerNo);
+  if(!u||!toBool_(u.ACTIVE))throw new Error('المعتمِد الجديد غير موجود أو غير فعال.');
+  const rid=normalizeRoleId_(u.ROLE_ID||u.ROLE||'');
+  if(rid!=='SYSTEM_ADMIN'&&!getEffectivePermissions_(approverComputerNo,rid).VISIT_APPROVE){
+    throw new Error('المستخدم '+String(u.NAME||approverComputerNo)+' لا يملك صلاحية اعتماد الزيارات (VISIT_APPROVE).');
+  }
+  const previous=String(v.APPROVER_COMPUTER_NO||'');
+  updateRowsByKeys_(getDb_().getSheetByName(APP.SHEETS.VISITS),{VISIT_ID:visitId},
+    {APPROVER_COMPUTER_NO:approverComputerNo,APPROVAL_REMINDER_AT:''});
+  notify_(approverComputerNo,'VISIT_PENDING_APPROVAL','زيارة أُسندت إليك للاعتماد',
+    'الزيارة '+visitId+' للمحطة '+String(v.STATION_NAME||v.STATION_NO||'')+' أصبحت بانتظار قرارك.',visitId,s.computerNo);
+  audit_(s.computerNo,'APPROVER_REASSIGNED',visitId,'from='+(previous||'(بلا إسناد)')+' to='+approverComputerNo);
+  return {ok:true,message:'تم إسناد الزيارة إلى '+String(u.NAME||approverComputerNo)+'.'};
+}
+
 /* V8.2.1 — طابور الاعتماد يعرض كل زيارة معلّقة داخل نطاق المستخدم، لا ما يستطيع اعتماده فقط.
    كان يعرض ما يستطيع اعتماده وحده، فيظهر في لوحة القيادة رقم «بانتظار الاعتماد» ثم تفتح
    الصفحة فتجدها فارغة — أوضح مثال: زيارة نفّذها المستخدم نفسه، فهو لا يعتمد زيارته.
@@ -204,6 +315,8 @@ function getApprovalQueue(token,filters){
     o.canApprove=canApprove;
     o.isMine=mine;
     o.blockReason=blockReason;
+    // V8.2.3: من يدير الخطط يستطيع إعادة إسناد ما لا يستطيع اعتماده، فيفكّ العالق
+    o.canReassign=!canApprove&&hasPermission_(session,'VISIT_PLAN_MANAGE');
     rows.push(o);
   });
   // ما يحتاج قرارك أولًا، ثم الأطول انتظارًا

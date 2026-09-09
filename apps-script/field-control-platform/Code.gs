@@ -1,10 +1,10 @@
 /* =====================================================================
    منصة الرقابة والزيارات الميدانية — Core: الإعدادات، تشغيل التطبيق، المصادقة، الجلسات، الصلاحيات، الأدوات المساعدة
-   V8.2.2 · شركة الدريس
+   V8.2.3 · شركة الدريس
    ===================================================================== */
 
 const APP = Object.freeze({
-  VERSION: '8.2.2',
+  VERSION: '8.2.3',
   NAME: 'منصة الرقابة والزيارات الميدانية',
   COMPANY: 'شركة الدريس للخدمات البترولية والنقليات',
   DB_PROP: 'ALDREES_CHECKLIST_DB_ID',
@@ -130,7 +130,7 @@ const HEADERS = Object.freeze({
    ========================= */
 const EXPECTED_FUNCTIONS_ = Object.freeze({
   'Code.gs':['doGet','login','resumeSession','getServerHealth'],
-  'Visits.gs':['getDashboard','searchStations','getStation','getChecklist','saveVisit','getMyVisits','getVisitDetail','adminListVisits','approveVisit','getApprovalQueue','getMySchedule','getMyIssues','submitIssueResolution','verifyIssueResolution','adminListIssues','adminListVisitPlans','adminSaveVisitPlan','calculatePlanMetrics_','adminUnlockVisitType','adminRevokeVisitUnlock','adminListVisitUnlocks'],
+  'Visits.gs':['getDashboard','searchStations','getStation','getChecklist','saveVisit','getMyVisits','getVisitDetail','adminListVisits','approveVisit','getApprovalQueue','getMySchedule','getMyIssues','submitIssueResolution','verifyIssueResolution','adminListIssues','adminListVisitPlans','adminSaveVisitPlan','calculatePlanMetrics_','adminUnlockVisitType','adminRevokeVisitUnlock','adminListVisitUnlocks','listApproverCandidates','adminReassignApprover','sessionForUser_'],
   'Workflow.gs':['runWorkflowMonitor','installWorkflowTrigger','resolveApproverForSupervisor_','updatePlanAfterVisit_','nextDueFromAnchor_','getVisitGate','assertVisitTypeAllowed_','satisfyLowerPriorityPlans_','visitAnchorDate_','visitCycleInfo_','visitGateForRows_','markVisitUnlockUsed_'],
   'Admin.gs':['getAdminDashboard','adminBootstrap','adminListUsers','adminSaveUser','adminListRoles','adminSaveRole','adminListChecklist','adminSaveChecklistItem','getStationAssignmentMeta','listStationAssignments','requestStationAssignment','requestStationAssignments','decideStationAssignment','decideStationAssignments'],
   'Supervisors.gs':['getSupervisors','getSupervisorDetail'],
