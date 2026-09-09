@@ -133,7 +133,11 @@ body.supervisor-mode .top-title span{color:var(--mid);font-weight:600}
 .sidebar-head-copy span{display:block;color:var(--muted);font-size:10px;white-space:nowrap}
 .sidebar-collapse{width:32px;height:32px;border:1px solid var(--line);border-radius:8px;background:#fff;color:var(--muted);display:grid;place-items:center;flex:none}
 .sidebar-collapse svg{width:16px;height:16px;transition:transform .2s}
-.sidebar-nav{flex:1;overflow:auto;padding:2px 0 6px;scrollbar-width:thin}
+.sidebar-nav{flex:1 1 auto;min-height:0;overflow:auto;padding:2px 0 6px;scrollbar-width:thin}
+/* V8.2.2: flex:1 (أساس صفر) كان يطوي القائمة إلى ارتفاع صفر لو لم يكن ارتفاع الدرج محدّدًا */
+.nav-empty{padding:18px 12px;text-align:center}
+.nav-empty strong{display:block;color:var(--dark);font-size:13px;margin-bottom:6px}
+.nav-empty p{margin:0 0 12px;color:var(--muted);font-size:11px;line-height:1.8}
 .nav-label{font-size:10px;color:var(--faint);font-weight:600;letter-spacing:.04em;padding:12px 10px 4px;text-transform:uppercase}
 .nav-btn{width:100%;border:0;background:transparent;border-radius:var(--r-sm);padding:9px 10px;display:flex;align-items:center;gap:10px;text-align:right;color:#4E6070;font-weight:500;margin:1px 0;position:relative;min-height:44px;transition:background .15s,color .15s}
 .nav-btn:hover{background:var(--surface-2);color:var(--dark)}
@@ -543,7 +547,7 @@ td strong{color:var(--dark);font-weight:600}
 @media (max-width:1100px){
   .workspace,body.sidebar-collapsed .workspace{display:block;padding:14px;max-width:100%}
   .mobile-menu-btn{display:grid}
-  .sidebar{display:flex!important;position:fixed;z-index:180;top:0;right:0;bottom:0;width:min(320px,88vw);max-height:none;border-radius:0;border:0;border-left:1px solid var(--line);padding:12px;transform:translateX(105%);box-shadow:var(--sh-lg);transition:transform .26s cubic-bezier(.2,.8,.2,1)}
+  .sidebar{display:flex!important;position:fixed;z-index:180;top:0;right:0;bottom:0;height:var(--app-vh);width:min(320px,88vw);max-height:none;border-radius:0;border:0;border-left:1px solid var(--line);padding:12px;transform:translateX(105%);box-shadow:var(--sh-lg);transition:transform .26s cubic-bezier(.2,.8,.2,1)}
   body.sidebar-open .sidebar{transform:translateX(0)}
   .sidebar-collapse{display:none}
   body.sidebar-collapsed .sidebar-head-copy,body.sidebar-collapsed .nav-text,body.sidebar-collapsed .nav-label,body.sidebar-collapsed .sidebar-user-copy{display:block}
@@ -703,6 +707,9 @@ input[type="file"]{width:100%}
   .page.page-enter>*,.modal,.modal-backdrop,.modal-backdrop.closing,.modal-backdrop.closing .modal,.nav-btn.active:after,.decision button.selected{animation:none!important}
   .btn:active,.icon-btn:active,.nav-btn:active,.kpi:active,.station-card:active,.visit-type:active,.dash-decision-row:active,.dash-scope-stat:active,.bar-row:active,.decision button:active,.top-logo-home:active{transform:none!important}
 }
+/* V8.2.2 — كناري اكتمال اللصق: آخر قاعدة في الملف.
+   لو وصل Index ناقصًا فلن تُعرّف هذه الخاصية، وتكشفها الواجهة عند الدخول. */
+:root{--ui-css-complete:1}
 @media print{
   .topbar,.sidebar,.footer-actions,.page-actions,.btn{display:none!important}
   .workspace{display:block;padding:0}
