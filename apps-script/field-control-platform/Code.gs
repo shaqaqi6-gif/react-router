@@ -1,10 +1,10 @@
 /* =====================================================================
    منصة الرقابة والزيارات الميدانية — Core: الإعدادات، تشغيل التطبيق، المصادقة، الجلسات، الصلاحيات، الأدوات المساعدة
-   V8.1.4.9 · شركة الدريس
+   V8.2.0 · شركة الدريس
    ===================================================================== */
 
 const APP = Object.freeze({
-  VERSION: '8.1.4.9',
+  VERSION: '8.2.0',
   NAME: 'منصة الرقابة والزيارات الميدانية',
   COMPANY: 'شركة الدريس للخدمات البترولية والنقليات',
   DB_PROP: 'ALDREES_CHECKLIST_DB_ID',
@@ -30,7 +30,8 @@ const APP = Object.freeze({
     NOTIFICATIONS: 'NOTIFICATIONS',
     TICKETS: 'TICKETS',
     TICKET_MESSAGES: 'TICKET_MESSAGES',
-    STATION_ASSIGNMENTS: 'STATION_ASSIGNMENTS'
+    STATION_ASSIGNMENTS: 'STATION_ASSIGNMENTS',
+    VISIT_UNLOCKS: 'VISIT_UNLOCKS'
   },
   VISIT_TYPES: {
     DAILY: 'يومية',
@@ -117,7 +118,10 @@ const HEADERS = Object.freeze({
   NOTIFICATIONS: ['NOTIFICATION_ID','COMPUTER_NO','TYPE','TITLE','BODY','REFERENCE','READ','CREATED_AT','CREATED_BY'],
   TICKETS: ['TICKET_ID','COMPUTER_NO','NAME','CATEGORY','SUBJECT','BODY','STATUS','PRIORITY','ASSIGNED_TO','CREATED_AT','UPDATED_AT','LAST_REPLY_AT','LAST_REPLY_BY','UNREAD_FOR_USER','UNREAD_FOR_ADMIN'],
   TICKET_MESSAGES: ['MESSAGE_ID','TICKET_ID','COMPUTER_NO','NAME','BODY','CREATED_AT','FROM_ADMIN'],
-  STATION_ASSIGNMENTS: ['ASSIGNMENT_ID','SUPERVISOR_COMPUTER_NO','STATION_NO','REQUESTED_BY','REQUESTED_AT','STATUS','APPROVED_BY','APPROVED_AT','REJECTED_BY','REJECTED_AT','DECISION_COMMENT','ACTIVE','UPDATED_AT']
+  STATION_ASSIGNMENTS: ['ASSIGNMENT_ID','SUPERVISOR_COMPUTER_NO','STATION_NO','REQUESTED_BY','REQUESTED_AT','STATUS','APPROVED_BY','APPROVED_AT','REJECTED_BY','REJECTED_AT','DECISION_COMMENT','ACTIVE','UPDATED_AT'],
+  /* V8.2: فتح إداري لنوع زيارة لمشرف في محطة بعينها.
+     CYCLE_KEY يحمل دورة الفتح (مثل MONTHLY|3) فينتهي مفعوله تلقائيًا ببداية الدورة التالية. */
+  VISIT_UNLOCKS: ['UNLOCK_ID','COMPUTER_NO','STATION_NO','VISIT_TYPE','CYCLE_KEY','ANCHOR_DATE','CYCLE_START','CYCLE_END','REASON','ACTIVE','CREATED_AT','CREATED_BY','REVOKED_AT','REVOKED_BY','CONSUMED_AT','CONSUMED_BY_VISIT_ID']
 });
 
 
@@ -126,8 +130,8 @@ const HEADERS = Object.freeze({
    ========================= */
 const EXPECTED_FUNCTIONS_ = Object.freeze({
   'Code.gs':['doGet','login','resumeSession','getServerHealth'],
-  'Visits.gs':['getDashboard','searchStations','getStation','getChecklist','saveVisit','getMyVisits','getVisitDetail','adminListVisits','approveVisit','getApprovalQueue','getMySchedule','getMyIssues','submitIssueResolution','verifyIssueResolution','adminListIssues','adminListVisitPlans','adminSaveVisitPlan','calculatePlanMetrics_'],
-  'Workflow.gs':['runWorkflowMonitor','installWorkflowTrigger','resolveApproverForSupervisor_','updatePlanAfterVisit_','nextDueFromAnchor_','getVisitGate','assertVisitTypeAllowed_','satisfyLowerPriorityPlans_'],
+  'Visits.gs':['getDashboard','searchStations','getStation','getChecklist','saveVisit','getMyVisits','getVisitDetail','adminListVisits','approveVisit','getApprovalQueue','getMySchedule','getMyIssues','submitIssueResolution','verifyIssueResolution','adminListIssues','adminListVisitPlans','adminSaveVisitPlan','calculatePlanMetrics_','adminUnlockVisitType','adminRevokeVisitUnlock','adminListVisitUnlocks'],
+  'Workflow.gs':['runWorkflowMonitor','installWorkflowTrigger','resolveApproverForSupervisor_','updatePlanAfterVisit_','nextDueFromAnchor_','getVisitGate','assertVisitTypeAllowed_','satisfyLowerPriorityPlans_','visitAnchorDate_','visitCycleInfo_','visitGateForRows_','markVisitUnlockUsed_'],
   'Admin.gs':['getAdminDashboard','adminBootstrap','adminListUsers','adminSaveUser','adminListRoles','adminSaveRole','adminListChecklist','adminSaveChecklistItem','getStationAssignmentMeta','listStationAssignments','requestStationAssignment','requestStationAssignments','decideStationAssignment','decideStationAssignments'],
   'Supervisors.gs':['getSupervisors','getSupervisorDetail'],
   'Support.gs':['getTicketMeta','createTicket','listMyTickets','getTicket','replyTicket','adminListTickets','adminUpdateTicket']
@@ -225,6 +229,7 @@ function setupOrUpgradeV4_() {
   ensureSheet_(ss, APP.SHEETS.TICKETS, HEADERS.TICKETS);
   ensureSheet_(ss, APP.SHEETS.TICKET_MESSAGES, HEADERS.TICKET_MESSAGES);
   ensureSheet_(ss, APP.SHEETS.STATION_ASSIGNMENTS, HEADERS.STATION_ASSIGNMENTS);
+  ensureSheet_(ss, APP.SHEETS.VISIT_UNLOCKS, HEADERS.VISIT_UNLOCKS);
 
   seedSettings_(ss);
   seedRoles_(ss);
@@ -551,7 +556,7 @@ function ensureSheet_(ss,name,headers){
   return sh;
 }
 
-const TEXT_COLUMNS_=['COMPUTER_NO','STATION_NO','DATE','START_DATE','END_DATE','OWNER_COMPUTER_NO','REGIONS','STATION_NOS','SYSTEM_ID','ITEM_ID','APPROVER_COMPUTER_NO','MANAGER_COMPUTER_NO','ASSIGNMENT_ID','SUPERVISOR_COMPUTER_NO','REQUESTED_BY','APPROVED_BY','REJECTED_BY'];
+const TEXT_COLUMNS_=['COMPUTER_NO','STATION_NO','DATE','START_DATE','END_DATE','OWNER_COMPUTER_NO','REGIONS','STATION_NOS','SYSTEM_ID','ITEM_ID','APPROVER_COMPUTER_NO','MANAGER_COMPUTER_NO','ASSIGNMENT_ID','SUPERVISOR_COMPUTER_NO','REQUESTED_BY','APPROVED_BY','REJECTED_BY','UNLOCK_ID','CYCLE_KEY','CYCLE_START','CYCLE_END','REVOKED_BY','CONSUMED_BY_VISIT_ID'];
 function applyTextColumnFormats_(sh){
   const lc=sh.getLastColumn();if(!lc)return;
   const headers=sh.getRange(1,1,1,lc).getValues()[0].map(String);

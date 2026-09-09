@@ -1,6 +1,6 @@
 /* =====================================================================
    Supervisors.gs — لوحة أداء المشرفين للمدير/المساعد/مدير المنطقة
-   V8.1.4.7 · شركة الدريس
+   V8.2.0 · شركة الدريس
    ===================================================================== */
 
 function supervisorVisibleTo_(session,u){
@@ -48,8 +48,36 @@ function getSupervisorDetail(token,computerNo,filters){
   // V8.1.4.7: نحسب مؤشرات هذا المشرف وحده بدل حساب كل المشرفين ثم تصفية واحد،
   // ونشمل الحسابات الموقوفة حتى لا تعود المؤشرات فارغة عند فتح ملف مشرف غير فعال.
   const metrics=getSupervisors(token,Object.assign({},filters,{computerNo:String(computerNo),includeInactive:true}))[0]||null;
-  const visits=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISITS)).filter(function(v){return String(v.COMPUTER_NO||'')===String(computerNo);}).sort(function(a,b){return sortKeyFromValue_(b.COMPLETED_AT).localeCompare(sortKeyFromValue_(a.COMPLETED_AT));}).slice(0,60).map(function(v){return visitListObjectForSession_(v,session);});
+  const allVisits=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISITS));
+  const myVisits=allVisits.filter(function(v){return String(v.COMPUTER_NO||'')===String(computerNo);});
+  const visits=myVisits.slice().sort(function(a,b){return sortKeyFromValue_(b.COMPLETED_AT).localeCompare(sortKeyFromValue_(a.COMPLETED_AT));}).slice(0,60).map(function(v){return visitListObjectForSession_(v,session);});
   const issues=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.ISSUES)).filter(function(x){return String(x.CREATED_BY||x.OWNER_COMPUTER_NO||'')===String(computerNo);}).sort(function(a,b){return sortKeyFromValue_(b.CREATED_AT).localeCompare(sortKeyFromValue_(a.CREATED_AT));}).slice(0,100).map(issueObject_);
   const plans=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS)).filter(function(p){return toBool_(p.ACTIVE)&&String(p.COMPUTER_NO||'')===String(computerNo);}).map(function(p){const st=findStation_(p.STATION_NO)||{};return{planId:String(p.PLAN_ID||''),stationNo:String(p.STATION_NO||''),stationName:st.stationName||('محطة '+p.STATION_NO),visitType:String(p.VISIT_TYPE||''),anchorDate:dateKeyFromValue_(p.ANCHOR_DATE),lastVisitDate:dateKeyFromValue_(p.LAST_VISIT_DATE),nextDueDate:dateKeyFromValue_(p.NEXT_DUE_DATE)||dateKeyFromValue_(p.START_DATE)};});
-  return{profile:{computerNo:String(user.COMPUTER_NO||''),name:String(user.NAME||''),phone:String(user.PHONE||''),regions:csvArray_(user.REGIONS),approverComputerNo:String(user.APPROVER_COMPUTER_NO||'')},metrics:metrics,visits:visits,issues:issues,plans:plans};
+  /* V8.2: حالة أنواع الزيارة لكل محطة مسندة للمشرف — تُحسب مرة واحدة من نفس البيانات المحمّلة،
+     ليعرض المدير في نافذة واحدة ما هو مفتوح وما هو مغلق ومتى يُفتح، ويفتح ما يلزم. */
+  const stationSet={};
+  csvArray_(user.STATION_NOS).forEach(function(no){stationSet[String(no)]=true;});
+  plans.forEach(function(p){if(p.stationNo)stationSet[String(p.stationNo)]=true;});
+  const unlockSh=getDb_().getSheetByName(APP.SHEETS.VISIT_UNLOCKS);
+  const unlockRows=unlockSh?sheetObjects_(unlockSh):[];
+  const canManageUnlocks=hasPermission_(session,'VISIT_PLAN_MANAGE');
+  const stationGates=Object.keys(stationSet).sort().map(function(no){
+    const st=findStation_(no)||{};
+    const gate=(typeof visitGateForRows_==='function')?visitGateForRows_(String(computerNo),no,myVisits,unlockRows):null;
+    return{
+      stationNo:no,
+      stationName:st.stationName||('محطة '+no),
+      region:st.region||'',
+      inScope:!st.stationNo||stationAllowed_(session,st),
+      anchorDate:gate?gate.anchorDate:'',
+      allowedVisitTypes:gate?gate.allowedVisitTypes:['DAILY'],
+      weekly:gate?gate.weekly:null,
+      monthly:gate?gate.monthly:null
+    };
+  });
+  return{
+    profile:{computerNo:String(user.COMPUTER_NO||''),name:String(user.NAME||''),phone:String(user.PHONE||''),regions:csvArray_(user.REGIONS),approverComputerNo:String(user.APPROVER_COMPUTER_NO||'')},
+    metrics:metrics,visits:visits,issues:issues,plans:plans,
+    stationGates:stationGates,canManageUnlocks:canManageUnlocks
+  };
 }

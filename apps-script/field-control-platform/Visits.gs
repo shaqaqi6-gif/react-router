@@ -1,6 +1,6 @@
 /* =====================================================================
    Visits.gs — الزيارات، الاعتماد، GPS، الملاحظات، الخطط والمتابعة
-   V8.1.4.7 · شركة الدريس
+   V8.2.0 · شركة الدريس
    ===================================================================== */
 
 function getDashboard(token){
@@ -115,6 +115,7 @@ function saveVisit(token,payload){
   updatePlanAfterVisit_(session.computerNo,station.stationNo,visitType,visitDate,approver);
   // الشهرية تُرحّل الزيارة الأسبوعية فقط إذا كانت مستحقة/متأخرة في نفس الدورة.
   satisfyLowerPriorityPlans_(session.computerNo,station.stationNo,visitType,visitDate,visitId,approver);
+  if(typeof markVisitUnlockUsed_==='function')markVisitUnlockUsed_(session.computerNo,station.stationNo,visitType,visitId,visitDate);
   });
   if(approver)notify_(approver,'VISIT_PENDING_APPROVAL','زيارة جديدة بانتظار الاعتماد','المشرف '+session.name+' أرسل زيارة '+APP.VISIT_TYPES[visitType]+' للمحطة '+station.stationName+' #'+station.stationNo+'.',visitId,session.computerNo);
   audit_(session.computerNo,'VISIT_SUBMITTED',visitId,'station='+station.stationNo+' score='+score+' gps='+gpsStatus+' distance='+distance);
@@ -371,6 +372,92 @@ function adminUpdateIssue(token,issueId,payload){const s=requireSession_(token);
 if(ISSUE_STATUSES_.indexOf(st)===-1)throw new Error('حالة الملاحظة غير معروفة.');
 if(owner&&owner!==String(x.OWNER_COMPUTER_NO||'')){const ou=findUserByComputerNo_(owner);if(!ou||!toBool_(ou.ACTIVE))throw new Error('المستخدم المسؤول غير موجود أو غير فعال.');}
 updateRowsByKeys_(ish,{ISSUE_ID:issueId},{STATUS:st,OWNER_COMPUTER_NO:owner,LAST_UPDATED_AT:new Date()});if(comment)appendObject_(getDb_().getSheetByName(APP.SHEETS.ISSUE_UPDATES),{UPDATE_ID:'UPD-'+Utilities.getUuid(),ISSUE_ID:issueId,TIMESTAMP:new Date(),COMPUTER_NO:s.computerNo,ACTION:'ADMIN_UPDATE',COMMENT:comment,STATUS_FROM:String(x.STATUS||''),STATUS_TO:st});refreshVisitWorkflow_(String(x.VISIT_ID||''));return{ok:true};}
+
+/* =====================================================================
+   V8.2 — الفتح الإداري لنوع الزيارة (مشرف + محطة، ينتهي بنهاية الدورة)
+   ===================================================================== */
+const UNLOCKABLE_VISIT_TYPES_=Object.freeze(['BIWEEKLY','MONTHLY']);
+
+function unlocksSheet_(){
+  const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_UNLOCKS);
+  if(!sh)throw new Error('شيت VISIT_UNLOCKS غير موجود. شغّل upgradeSystemV4() من المحرر أولًا.');
+  return sh;
+}
+
+function assertCanManageUnlocks_(session,station){
+  requirePermission_(session,'VISIT_PLAN_MANAGE');
+  if(session.roleId==='SYSTEM_ADMIN')return;
+  if(station&&!stationAllowed_(session,station))throw new Error('المحطة خارج نطاقك.');
+}
+
+function adminUnlockVisitType(token,payload){
+  const s=requireSession_(token); payload=payload||{};
+  const computerNo=limitText_(normalizeText_(payload.computerNo),32);
+  const stationNo=limitText_(normalizeText_(payload.stationNo),40);
+  const visitType=normalizeText_(payload.visitType).toUpperCase();
+  const reason=limitText_(normalizeText_(payload.reason),500);
+  if(UNLOCKABLE_VISIT_TYPES_.indexOf(visitType)===-1)throw new Error('يمكن فتح الزيارة الأسبوعية أو الشهرية فقط. اليومية مفتوحة دائمًا.');
+  const user=findUserByComputerNo_(computerNo);
+  if(!user||!toBool_(user.ACTIVE))throw new Error('المشرف غير موجود أو غير فعال.');
+  const station=findStation_(stationNo);
+  if(!station||!station.active)throw new Error('المحطة غير موجودة أو غير فعالة.');
+  assertCanManageUnlocks_(s,station);
+
+  const gate=visitGateFor_(computerNo,stationNo), state=gate.states[visitType];
+  if(state.doneVisitId)throw new Error('تم تنفيذ الزيارة '+state.label+' لهذه الدورة بالفعل ('+state.doneDate+'). الدورة القادمة تبدأ '+dateAddDaysKey_(state.cycleEnd,1)+'.');
+  if(state.unlocked)return {ok:true,already:true,unlockId:state.unlockId,message:'الزيارة '+state.label+' مفتوحة أصلًا لهذه الدورة.'};
+  if(state.open)return {ok:true,already:true,unlockId:'',message:'الزيارة '+state.label+' متاحة أصلًا لهذا المشرف في هذه المحطة.'};
+
+  const sh=unlocksSheet_(), id='UNL-'+Utilities.getUuid().slice(0,10);
+  appendObject_(sh,{
+    UNLOCK_ID:id,COMPUTER_NO:computerNo,STATION_NO:stationNo,VISIT_TYPE:visitType,
+    CYCLE_KEY:state.cycleKey,ANCHOR_DATE:gate.anchorDate,CYCLE_START:state.cycleStart,CYCLE_END:state.cycleEnd,
+    REASON:reason,ACTIVE:true,CREATED_AT:new Date(),CREATED_BY:s.computerNo
+  });
+  notify_(computerNo,'VISIT_TYPE_UNLOCKED','تم فتح زيارة لك','فُتحت لك الزيارة '+state.label+' في المحطة '+station.stationName+' #'+station.stationNo+(state.cycleEnd?(' حتى '+state.cycleEnd):'')+'.',id,s.computerNo);
+  audit_(s.computerNo,'VISIT_TYPE_UNLOCKED',id,computerNo+' '+stationNo+' '+visitType+' cycle='+state.cycleKey);
+  return {ok:true,unlockId:id,visitType:visitType,cycleKey:state.cycleKey,cycleEnd:state.cycleEnd,
+    message:'تم فتح الزيارة '+state.label+' لهذا المشرف في هذه المحطة'+(state.cycleEnd?(' حتى نهاية الدورة في '+state.cycleEnd):'')+'.'};
+}
+
+function adminRevokeVisitUnlock(token,unlockId){
+  const s=requireSession_(token);
+  unlockId=limitText_(normalizeText_(unlockId),80);
+  const sh=unlocksSheet_();
+  const row=sheetObjects_(sh).filter(function(u){return String(u.UNLOCK_ID||'')===unlockId;})[0];
+  if(!row)throw new Error('سجل الفتح غير موجود.');
+  assertCanManageUnlocks_(s,findStation_(String(row.STATION_NO||'')));
+  if(!toBool_(row.ACTIVE))return {ok:true,already:true,message:'الفتح ملغى مسبقًا.'};
+  updateRowsByKeys_(sh,{UNLOCK_ID:unlockId},{ACTIVE:false,REVOKED_AT:new Date(),REVOKED_BY:s.computerNo});
+  audit_(s.computerNo,'VISIT_TYPE_UNLOCK_REVOKED',unlockId,String(row.COMPUTER_NO||'')+' '+String(row.STATION_NO||'')+' '+String(row.VISIT_TYPE||''));
+  return {ok:true,message:'تم إلغاء الفتح.'};
+}
+
+function adminListVisitUnlocks(token,computerNo){
+  const s=requireSession_(token);
+  requirePermission_(s,'VISIT_PLAN_MANAGE');
+  computerNo=limitText_(normalizeText_(computerNo),32);
+  const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_UNLOCKS);
+  if(!sh)return [];
+  return sheetObjects_(sh).filter(function(u){
+    if(computerNo&&String(u.COMPUTER_NO||'')!==computerNo)return false;
+    const st=findStation_(String(u.STATION_NO||''));
+    if(s.roleId!=='SYSTEM_ADMIN'&&st&&!stationAllowed_(s,st))return false;
+    return true;
+  }).sort(function(a,b){return sortKeyFromValue_(b.CREATED_AT).localeCompare(sortKeyFromValue_(a.CREATED_AT));}).slice(0,200).map(function(u){
+    const st=findStation_(String(u.STATION_NO||''))||{};
+    return{
+      unlockId:String(u.UNLOCK_ID||''),computerNo:String(u.COMPUTER_NO||''),stationNo:String(u.STATION_NO||''),
+      stationName:st.stationName||('محطة '+String(u.STATION_NO||'')),
+      visitType:String(u.VISIT_TYPE||''),visitTypeLabel:APP.VISIT_TYPES[String(u.VISIT_TYPE||'')]||String(u.VISIT_TYPE||''),
+      cycleKey:String(u.CYCLE_KEY||''),cycleStart:dateKeyFromValue_(u.CYCLE_START),cycleEnd:dateKeyFromValue_(u.CYCLE_END),
+      reason:String(u.REASON||''),active:toBool_(u.ACTIVE),
+      createdAt:formatDateTimeSafe_(u.CREATED_AT),createdBy:String(u.CREATED_BY||''),
+      consumedAt:formatDateTimeSafe_(u.CONSUMED_AT),consumedByVisitId:String(u.CONSUMED_BY_VISIT_ID||''),
+      revokedAt:formatDateTimeSafe_(u.REVOKED_AT),revokedBy:String(u.REVOKED_BY||'')
+    };
+  });
+}
 
 function getMySchedule(token){const s=requireSession_(token),today=dateKey_(new Date());const plans=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS)).filter(function(p){return toBool_(p.ACTIVE)&&String(p.COMPUTER_NO||'')===s.computerNo;});return plans.map(function(p){const due=dateKeyFromValue_(p.NEXT_DUE_DATE)||dateKeyFromValue_(p.START_DATE),station=findStation_(p.STATION_NO)||{stationName:'محطة '+p.STATION_NO};let status='UPCOMING',days=0;if(due){const dd=parseDateKey_(due),tt=parseDateKey_(today);days=Math.round((dd-tt)/86400000);if(days<0)status='OVERDUE';else if(days===0)status='DUE_TODAY';else if(days<=3)status='DUE_SOON';}return{planId:String(p.PLAN_ID||''),stationNo:String(p.STATION_NO||''),stationName:station.stationName,visitType:String(p.VISIT_TYPE||''),startDate:dateKeyFromValue_(p.START_DATE),anchorDate:dateKeyFromValue_(p.ANCHOR_DATE),lastVisitDate:dateKeyFromValue_(p.LAST_VISIT_DATE),nextDueDate:due,status:status,daysToDue:days};}).sort(function(a,b){return String(a.nextDueDate||'9999').localeCompare(String(b.nextDueDate||'9999'));});}
 

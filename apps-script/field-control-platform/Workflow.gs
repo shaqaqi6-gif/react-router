@@ -1,0 +1,496 @@
+/* =====================================================================
+   Workflow.gs — دورة الاعتماد، الجداول الزمنية، التنبيهات والتصعيد
+   V8.1 · شركة الدريس
+   ===================================================================== */
+
+function settingValue_(key, fallback) {
+  try {
+    const rows = sheetObjects_(getDb_().getSheetByName(APP.SHEETS.SETTINGS));
+    const hit = rows.filter(function(r){ return String(r.KEY||'')===String(key); })[0];
+    return hit && hit.VALUE !== '' ? hit.VALUE : fallback;
+  } catch(e) { return fallback; }
+}
+
+function userByNo_(computerNo) {
+  return findUserByComputerNo_(String(computerNo||''));
+}
+
+function resolveApproverForSupervisor_(computerNo, station) {
+  const u = userByNo_(computerNo);
+  if (u && String(u.APPROVER_COMPUTER_NO||'')) return String(u.APPROVER_COMPUTER_NO);
+  const users = sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(x){return toBool_(x.ACTIVE);});
+  const region = station ? String(station.region||station.REGION||'') : '';
+  const branch = station ? String(station.branch||station.BRANCH||'') : '';
+  const preferred = ['APPROVAL_ASSISTANT','REGION_MANAGER','SUPERVISION_MANAGER','OPERATIONS_DEPUTY','OPERATIONS_MANAGER','SYSTEM_ADMIN'];
+  for (let p=0;p<preferred.length;p++) {
+    for (let i=0;i<users.length;i++) {
+      const role=normalizeRoleId_(users[i].ROLE_ID||users[i].ROLE||'');
+      if(role!==preferred[p]) continue;
+      if(role==='SYSTEM_ADMIN') return String(users[i].COMPUTER_NO||'');
+      const regs=csvArray_(users[i].REGIONS);
+      const mode=normalizeScopeMode_(users[i].SCOPE_MODE,role);
+      if(mode==='ALL' || !regs.length || regs.indexOf(region)!==-1 || regs.indexOf(branch)!==-1) return String(users[i].COMPUTER_NO||'');
+    }
+  }
+  return APP.ADMIN.computerNo;
+}
+
+function managerForUser_(computerNo) {
+  const u=userByNo_(computerNo);
+  return u ? String(u.MANAGER_COMPUTER_NO||'') : '';
+}
+
+function canApproveVisit_(session, visit) {
+  if(!session || !visit) return false;
+  if(session.computerNo===String(visit.COMPUTER_NO||'')) return false;
+  if(session.roleId==='SYSTEM_ADMIN') return true;
+  if(!hasPermission_(session,'VISIT_APPROVE')) return false;
+  const assigned=String(visit.APPROVER_COMPUTER_NO||'');
+  if(assigned){
+    if(assigned===session.computerNo) return true;
+    if(hasPermission_(session,'VISIT_VIEW_ALL')) return true;
+    if(managerForUser_(assigned)===session.computerNo) return true;
+    return false;
+  }
+  if(hasPermission_(session,'VISIT_VIEW_ALL')) return true;
+  return visitAllowed_(session,visit);
+}
+
+function dateAddDaysKey_(key, days) {
+  const d=parseDateKey_(key); if(!d) return '';
+  d.setDate(d.getDate()+Number(days||0)); return dateKey_(d);
+}
+
+function dateTimeAddHours_(d, hours) {
+  const x=asDate_(d)||new Date(); return new Date(x.getTime()+Number(hours||0)*3600000);
+}
+
+function monthlyOccurrence_(anchor, monthOffset) {
+  const a=parseDateKey_(anchor); if(!a) return '';
+  const year=a.getFullYear(), month=a.getMonth()+Number(monthOffset||0), day=a.getDate();
+  const last=new Date(year,month+1,0).getDate();
+  return dateKey_(new Date(year,month,Math.min(day,last)));
+}
+
+function nextDueFromAnchor_(anchorDate, visitType, afterDate) {
+  anchorDate=String(anchorDate||''); afterDate=String(afterDate||anchorDate);
+  if(!parseDateKey_(anchorDate)) return '';
+  if(visitType==='DAILY') {
+    const step=Math.max(1,Number(settingValue_('DAILY_INTERVAL_DAYS','1'))||1);
+    let c=anchorDate; while(c<=afterDate)c=dateAddDaysKey_(c,step); return c;
+  }
+  if(visitType==='BIWEEKLY') {
+    const step=Math.max(1,Number(settingValue_('WEEKLY_INTERVAL_DAYS','7'))||7);
+    let c=anchorDate; while(c<=afterDate)c=dateAddDaysKey_(c,step); return c;
+  }
+  if(visitType==='MONTHLY') {
+    let m=1,c=monthlyOccurrence_(anchorDate,m);
+    while(c && c<=afterDate && m<240){m++;c=monthlyOccurrence_(anchorDate,m);} return c;
+  }
+  return dateAddDaysKey_(afterDate,1);
+}
+
+function updatePlanAfterVisit_(computerNo, stationNo, visitType, visitDate, approverComputerNo) {
+  const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS);
+  const rows=sh.getDataRange().getValues(); if(rows.length<=1)return;
+  const idx=headerMap_(rows[0]);
+  for(let r=1;r<rows.length;r++){
+    if(String(rows[r][idx.COMPUTER_NO]||'')!==String(computerNo))continue;
+    if(String(rows[r][idx.STATION_NO]||'')!==String(stationNo))continue;
+    if(String(rows[r][idx.VISIT_TYPE]||'')!==String(visitType))continue;
+    if(!toBool_(rows[r][idx.ACTIVE]))continue;
+    let anchor=idx.ANCHOR_DATE!==undefined?dateKeyFromValue_(rows[r][idx.ANCHOR_DATE]):'';
+    if(!anchor) anchor=visitDate;
+    const next=nextDueFromAnchor_(anchor,visitType,visitDate);
+    const patch={ANCHOR_DATE:anchor,LAST_VISIT_DATE:visitDate,NEXT_DUE_DATE:next};
+    if(approverComputerNo)patch.APPROVER_COMPUTER_NO=approverComputerNo;
+    patchRowByNumber_(sh,r+1,patch);
+  }
+}
+
+
+/* =========================
+   دوال الخطط المساعدة.
+   ملاحظة V8.2: لم تعد بوابة أنواع الزيارة تعتمد على VISIT_PLANS إطلاقًا —
+   صارت تُحسب من تاريخ أول زيارة فعلية للمحطة. هذه الدوال باقية لأنها
+   تخدم شاشة الخطط والجدول الزمني ومراقب الزيارات المتأخرة.
+   ========================= */
+function activePlanFor_(computerNo, stationNo, visitType) {
+  const today=dateKey_(new Date());
+  const rows=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS));
+  return rows.filter(function(p){
+    if(!toBool_(p.ACTIVE))return false;
+    if(String(p.COMPUTER_NO||'')!==String(computerNo))return false;
+    if(String(p.STATION_NO||'')!==String(stationNo))return false;
+    if(String(p.VISIT_TYPE||'')!==String(visitType))return false;
+    const start=dateKeyFromValue_(p.START_DATE), end=dateKeyFromValue_(p.END_DATE);
+    if(start&&today<start)return false;
+    if(end&&today>end)return false;
+    return true;
+  }).sort(function(a,b){return String(dateKeyFromValue_(a.START_DATE)||'').localeCompare(String(dateKeyFromValue_(b.START_DATE)||''));})[0]||null;
+}
+
+function latestVisitForPlan_(computerNo, stationNo, visitType) {
+  const rows=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISITS)).filter(function(v){
+    return String(v.COMPUTER_NO||'')===String(computerNo) &&
+      String(v.STATION_NO||'')===String(stationNo) &&
+      String(v.VISIT_TYPE||'')===String(visitType);
+  });
+  rows.sort(function(a,b){return sortKeyFromValue_(b.SUBMITTED_AT||b.COMPLETED_AT||b.DATE).localeCompare(sortKeyFromValue_(a.SUBMITTED_AT||a.COMPLETED_AT||a.DATE));});
+  return rows[0]||null;
+}
+
+function planRequiresVisitNow_(plan, computerNo, stationNo, visitType, today) {
+  if(!plan)return {required:false,dueDate:'',reason:''};
+  const due=dateKeyFromValue_(plan.NEXT_DUE_DATE)||dateKeyFromValue_(plan.START_DATE);
+  const latest=latestVisitForPlan_(computerNo,stationNo,visitType);
+  const lastPlanVisit=dateKeyFromValue_(plan.LAST_VISIT_DATE);
+  // إذا رُفضت آخر زيارة التي حركت الخطة، تعود نفس الزيارة إلزامية حتى يعيد المشرف تنفيذها.
+  if(latest && String(latest.APPROVAL_STATUS||'')==='REJECTED' && lastPlanVisit && dateKeyFromValue_(latest.DATE)===lastPlanVisit){
+    return {required:true,dueDate:lastPlanVisit,reason:'REJECTED'};
+  }
+  if(due && due<=today)return {required:true,dueDate:due,reason:due<today?'OVERDUE':'DUE_TODAY'};
+  return {required:false,dueDate:due,reason:''};
+}
+
+/* =====================================================================
+   V8.2 — قواعد فتح أنواع الزيارة (معتمدة ٢٠٢٦-٠٩-٠٩)
+
+   المرساة (ANCHOR) = تاريخ أول زيارة لهذا المشرف في هذه المحطة، أيًّا كان نوعها.
+
+   اليومية   : مفتوحة كل يوم بلا شرط ولا قفل.
+   الأسبوعية : تُفتح بعد مرور ٧ أيام من المرساة، ثم مرة واحدة في كل دورة ٧ أيام.
+   الشهرية   : تُفتح بعد مرور ٣٠ يومًا من المرساة، ثم مرة واحدة في كل دورة ٣٠ يومًا.
+   الفتح الإداري: يفتح النوع فورًا لمشرف + محطة بعينها، وينتهي تلقائيًا بنهاية
+                  الدورة الجارية لأن مفتاح الدورة CYCLE_KEY يتغيّر — بلا مهمة تنظيف.
+
+   لا توجد زيارة «مفروضة» بعد اليوم: النوع المستحق يظهر كاقتراح لا كإجبار،
+   واليومية لا تُقفل في أي حال.
+   ===================================================================== */
+
+function visitCycleDays_(visitType){
+  if(visitType==='BIWEEKLY')return Math.max(1,Number(settingValue_('WEEKLY_UNLOCK_DAYS','7'))||7);
+  if(visitType==='MONTHLY')return Math.max(1,Number(settingValue_('MONTHLY_UNLOCK_DAYS','30'))||30);
+  return 1;
+}
+
+function daysBetweenKeys_(fromKey,toKey){
+  const a=parseDateKey_(fromKey),b=parseDateKey_(toKey);
+  return (a&&b)?Math.round((b-a)/86400000):0;
+}
+
+/* أول زيارة لهذا المشرف في هذه المحطة — تُحتسب أيًّا كانت حالة الاعتماد،
+   لأن العلاقة بالمحطة بدأت فعليًا حتى لو رُفضت الزيارة لاحقًا. */
+function visitAnchorDate_(computerNo, stationNo, visitRows){
+  const rows=visitRows||sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISITS));
+  let anchor='';
+  for(let i=0;i<rows.length;i++){
+    const v=rows[i];
+    if(String(v.COMPUTER_NO||'')!==String(computerNo))continue;
+    if(String(v.STATION_NO||'')!==String(stationNo))continue;
+    const d=dateKeyFromValue_(v.DATE);
+    if(!d)continue;
+    if(!anchor||d<anchor)anchor=d;
+  }
+  return anchor;
+}
+
+function visitCycleInfo_(visitType, anchor, today){
+  const span=visitCycleDays_(visitType);
+  if(!anchor){
+    return {index:0,span:span,start:'',end:'',opensOn:'',daysToOpen:span,eligible:false,key:visitType+'|0'};
+  }
+  const elapsed=Math.max(0,daysBetweenKeys_(anchor,today));
+  const index=Math.floor(elapsed/span);
+  return {
+    index:index,span:span,
+    start:dateAddDaysKey_(anchor,index*span),
+    end:dateAddDaysKey_(anchor,(index+1)*span-1),
+    opensOn:index>=1?dateAddDaysKey_(anchor,index*span):dateAddDaysKey_(anchor,span),
+    daysToOpen:index>=1?0:Math.max(0,span-elapsed),
+    eligible:index>=1,
+    key:visitType+'|'+index
+  };
+}
+
+/* هل نُفّذت زيارة من هذا النوع داخل الدورة الحالية؟ الزيارة المرفوضة لا تُغلق الدورة. */
+function typeDoneInCycle_(computerNo, stationNo, visitType, cycle, visitRows){
+  if(!cycle||!cycle.start)return null;
+  const rows=visitRows||sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISITS));
+  for(let i=0;i<rows.length;i++){
+    const v=rows[i];
+    if(String(v.COMPUTER_NO||'')!==String(computerNo))continue;
+    if(String(v.STATION_NO||'')!==String(stationNo))continue;
+    if(String(v.VISIT_TYPE||'')!==String(visitType))continue;
+    if(String(v.APPROVAL_STATUS||'')==='REJECTED')continue;
+    const d=dateKeyFromValue_(v.DATE);
+    if(d&&d>=cycle.start&&d<=cycle.end)return v;
+  }
+  return null;
+}
+
+function activeUnlockFor_(computerNo, stationNo, cycleKey, unlockRows){
+  let rows=unlockRows;
+  if(!rows){
+    const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_UNLOCKS);
+    rows=sh?sheetObjects_(sh):[];
+  }
+  for(let i=0;i<rows.length;i++){
+    const u=rows[i];
+    if(!toBool_(u.ACTIVE))continue;
+    if(String(u.COMPUTER_NO||'')!==String(computerNo))continue;
+    if(String(u.STATION_NO||'')!==String(stationNo))continue;
+    if(String(u.CYCLE_KEY||'')!==String(cycleKey))continue;
+    return u;
+  }
+  return null;
+}
+
+function visitTypeStateFor_(computerNo, stationNo, visitType, anchor, today, visitRows, unlockRows){
+  const cycle=visitCycleInfo_(visitType,anchor,today);
+  const done=typeDoneInCycle_(computerNo,stationNo,visitType,cycle,visitRows);
+  const unlock=activeUnlockFor_(computerNo,stationNo,cycle.key,unlockRows);
+  const label=APP.VISIT_TYPES[visitType]||visitType;
+  const open=!done&&(!!unlock||cycle.eligible);
+  let blockedReason='';
+  if(done){
+    blockedReason='تم تنفيذ الزيارة '+label+' لهذه الدورة'+(cycle.end?(' التي تنتهي '+cycle.end):'')+'.';
+  }else if(!cycle.eligible){
+    blockedReason=anchor
+      ? ('الزيارة '+label+' تُفتح بعد مرور '+cycle.span+' يومًا من أول زيارة لهذه المحطة ('+anchor+')'+(cycle.opensOn?(' — تُفتح في '+cycle.opensOn):'')+'.')
+      : ('الزيارة '+label+' تُفتح بعد مرور '+cycle.span+' يومًا من أول زيارة لهذه المحطة. نفّذ الزيارة اليومية أولًا.');
+  }
+  return {
+    visitType:visitType,label:label,open:open,
+    unlocked:!!unlock,
+    unlockId:unlock?String(unlock.UNLOCK_ID||''):'',
+    doneVisitId:done?String(done.VISIT_ID||''):'',
+    doneDate:done?dateKeyFromValue_(done.DATE):'',
+    cycleKey:cycle.key,cycleIndex:cycle.index,cycleStart:cycle.start,cycleEnd:cycle.end,
+    opensOn:cycle.opensOn,daysToOpen:cycle.daysToOpen,spanDays:cycle.span,
+    blockedReason:blockedReason
+  };
+}
+
+function visitGateForRows_(computerNo, stationNo, visitRows, unlockRows){
+  const today=dateKey_(new Date());
+  const anchor=visitAnchorDate_(computerNo,stationNo,visitRows);
+  const weekly=visitTypeStateFor_(computerNo,stationNo,'BIWEEKLY',anchor,today,visitRows,unlockRows);
+  const monthly=visitTypeStateFor_(computerNo,stationNo,'MONTHLY',anchor,today,visitRows,unlockRows);
+
+  const allowed=['DAILY'];
+  if(weekly.open)allowed.push('BIWEEKLY');
+  if(monthly.open)allowed.push('MONTHLY');
+
+  // اقتراح غير ملزم: الأعلى دورة أولًا. اليومية تبقى مفتوحة في كل الأحوال.
+  const suggested=monthly.open?'MONTHLY':(weekly.open?'BIWEEKLY':'');
+  const suggestedLabel=suggested?(APP.VISIT_TYPES[suggested]||suggested):'';
+  const suggestion=suggested
+    ? ('الزيارة '+suggestedLabel+' متاحة الآن لهذه المحطة. اليومية متاحة أيضًا — الاختيار لك.')
+    : 'الزيارة اليومية متاحة. لا توجد زيارة دورية مفتوحة لهذه المحطة حاليًا.';
+
+  return {
+    anchorDate:anchor,
+    allowedVisitTypes:allowed,
+    suggestedVisitType:suggested,
+    suggestedVisitLabel:suggestedLabel,
+    suggestion:suggestion,
+    weekly:weekly,
+    monthly:monthly,
+    states:{BIWEEKLY:weekly,MONTHLY:monthly},
+    /* حقول متوافقة مع الإصدارات السابقة — لم يعد النظام يفرض نوعًا ولا يقفل اليومية */
+    requiredVisitType:'',
+    requiredVisitLabel:'',
+    forced:false,
+    dailyAllowed:true,
+    dueDate:suggested?(suggested==='MONTHLY'?monthly.cycleEnd:weekly.cycleEnd):'',
+    reason:'',
+    message:suggestion
+  };
+}
+
+function visitGateFor_(computerNo, stationNo) {
+  const ss=getDb_();
+  const unlockSh=ss.getSheetByName(APP.SHEETS.VISIT_UNLOCKS);
+  return visitGateForRows_(
+    computerNo,stationNo,
+    sheetObjects_(ss.getSheetByName(APP.SHEETS.VISITS)),
+    unlockSh?sheetObjects_(unlockSh):[]
+  );
+}
+
+function getVisitGate(token, stationNo) {
+  const session=requireSession_(token); requirePermission_(session,'VISIT_CREATE');
+  const station=findStation_(stationNo);
+  if(!station||!station.active)throw new Error('المحطة غير موجودة أو غير فعالة.');
+  if(!stationAllowed_(session,station))throw new Error('المحطة خارج نطاقك.');
+  return visitGateFor_(session.computerNo,station.stationNo);
+}
+
+function assertVisitTypeAllowed_(session, stationNo, visitType) {
+  visitType=String(visitType||'');
+  const gate=visitGateFor_(session.computerNo,stationNo);
+  if(gate.allowedVisitTypes.indexOf(visitType)!==-1)return gate;
+  const state=gate.states[visitType];
+  throw new Error(state&&state.blockedReason?state.blockedReason:'هذا النوع من الزيارات غير متاح لهذه المحطة الآن.');
+}
+
+/* يُستدعى بعد حفظ الزيارة: يسجّل استهلاك الفتح الإداري للتدقيق.
+   الفتح لا يُلغى هنا — ينتهي تلقائيًا لأن الدورة صارت منفَّذة. */
+function markVisitUnlockUsed_(computerNo, stationNo, visitType, visitId, visitDate){
+  try{
+    if(visitType!=='BIWEEKLY'&&visitType!=='MONTHLY')return 0;
+    const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_UNLOCKS);
+    if(!sh)return 0;
+    const anchor=visitAnchorDate_(computerNo,stationNo);
+    const cycle=visitCycleInfo_(visitType,anchor,visitDate||dateKey_(new Date()));
+    const u=activeUnlockFor_(computerNo,stationNo,cycle.key);
+    if(!u||String(u.CONSUMED_AT||''))return 0;
+    return updateRowsByKeys_(sh,{UNLOCK_ID:String(u.UNLOCK_ID||'')},{CONSUMED_AT:new Date(),CONSUMED_BY_VISIT_ID:String(visitId||'')});
+  }catch(e){return 0;}
+}
+
+/* الشهرية تغطي الزيارة الأسبوعية إذا كانت مستحقة/متأخرة في نفس اليوم.
+   لا نرحّل الزيارة الأسبوعية المستقبلية غير المستحقة. */
+function satisfyLowerPriorityPlans_(computerNo, stationNo, completedType, visitDate, visitId, approverComputerNo) {
+  if(String(completedType)!=='MONTHLY')return 0;
+  const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS), rows=sh.getDataRange().getValues();
+  if(rows.length<=1)return 0;
+  const idx=headerMap_(rows[0]); let count=0;
+  for(let r=1;r<rows.length;r++){
+    if(String(rows[r][idx.COMPUTER_NO]||'')!==String(computerNo))continue;
+    if(String(rows[r][idx.STATION_NO]||'')!==String(stationNo))continue;
+    if(String(rows[r][idx.VISIT_TYPE]||'')!=='BIWEEKLY')continue;
+    if(!toBool_(rows[r][idx.ACTIVE]))continue;
+    const end=idx.END_DATE!==undefined?dateKeyFromValue_(rows[r][idx.END_DATE]):''; if(end&&visitDate>end)continue;
+    const due=(idx.NEXT_DUE_DATE!==undefined?dateKeyFromValue_(rows[r][idx.NEXT_DUE_DATE]):'')||dateKeyFromValue_(rows[r][idx.START_DATE]);
+    if(!due||due>visitDate)continue;
+    let anchor=idx.ANCHOR_DATE!==undefined?dateKeyFromValue_(rows[r][idx.ANCHOR_DATE]):'';
+    if(!anchor)anchor=visitDate;
+    const patch={ANCHOR_DATE:anchor,LAST_VISIT_DATE:visitDate,NEXT_DUE_DATE:nextDueFromAnchor_(anchor,'BIWEEKLY',visitDate)};
+    if(idx.LAST_SATISFIED_BY_TYPE!==undefined)patch.LAST_SATISFIED_BY_TYPE='MONTHLY';
+    if(idx.LAST_SATISFIED_BY_VISIT_ID!==undefined)patch.LAST_SATISFIED_BY_VISIT_ID=String(visitId||'');
+    if(approverComputerNo)patch.APPROVER_COMPUTER_NO=approverComputerNo;
+    patchRowByNumber_(sh,r+1,patch); count++;
+  }
+  return count;
+}
+
+function ensureWorkflowTrigger_(){
+  try{
+    const found=ScriptApp.getProjectTriggers().some(function(t){return t.getHandlerFunction()==='runWorkflowMonitor';});
+    if(!found)ScriptApp.newTrigger('runWorkflowMonitor').timeBased().everyHours(1).create();
+  }catch(e){Logger.log('Workflow trigger: '+e.message);}
+}
+
+function installWorkflowTrigger(){
+  requireEditorRun_();
+  ScriptApp.getProjectTriggers().forEach(function(t){if(t.getHandlerFunction()==='runWorkflowMonitor')ScriptApp.deleteTrigger(t);});
+  ScriptApp.newTrigger('runWorkflowMonitor').timeBased().everyHours(1).create();
+  return {ok:true,message:'تم تثبيت مراقب الزيارات والملاحظات كل ساعة.'};
+}
+
+function runWorkflowMonitor(){
+  const ss=getDb_(), now=new Date(), today=dateKey_(now);
+  const visitsSh=ss.getSheetByName(APP.SHEETS.VISITS), issuesSh=ss.getSheetByName(APP.SHEETS.ISSUES), plansSh=ss.getSheetByName(APP.SHEETS.VISIT_PLANS);
+  const visits=visitsSh.getDataRange().getValues(), vi=headerMap_(visits[0]||[]);
+  const issues=issuesSh.getDataRange().getValues(), ii=headerMap_(issues[0]||[]);
+  const plans=plansSh.getDataRange().getValues(), pi=headerMap_(plans[0]||[]);
+  let approvalAlerts=0,issueAlerts=0,missedAlerts=0;
+
+  for(let r=1;r<visits.length;r++){
+    if(String(visits[r][vi.APPROVAL_STATUS]||'')!=='PENDING')continue;
+    const due=asDate_(visits[r][vi.APPROVAL_DUE_AT]); if(!due||due>now)continue;
+    const last=asDate_(visits[r][vi.APPROVAL_REMINDER_AT]); if(last && now-last<86400000)continue;
+    const approver=String(visits[r][vi.APPROVER_COMPUTER_NO]||'');
+    if(approver){
+      notify_(approver,'APPROVAL_OVERDUE','زيارة تنتظر اعتمادك','زيارة '+String(visits[r][vi.VISIT_ID]||'')+' للمحطة '+String(visits[r][vi.STATION_NAME]||visits[r][vi.STATION_NO]||'')+' تجاوزت مهلة الاعتماد.',String(visits[r][vi.VISIT_ID]||''),'SYSTEM');
+      const manager=managerForUser_(approver); if(manager)notify_(manager,'APPROVAL_ESCALATION','تأخر اعتماد زيارة','يوجد اعتماد متأخر لدى '+approver+' للزيارة '+String(visits[r][vi.VISIT_ID]||''),String(visits[r][vi.VISIT_ID]||''),'SYSTEM');
+    }
+    if(vi.APPROVAL_REMINDER_AT!==undefined)visitsSh.getRange(r+1,vi.APPROVAL_REMINDER_AT+1).setValue(now);
+    approvalAlerts++;
+  }
+
+  for(let r=1;r<issues.length;r++){
+    const status=String(issues[r][ii.STATUS]||'');
+    if(['CLOSED','CANCELED','PENDING_APPROVAL'].indexOf(status)!==-1)continue;
+    const due=dateKeyFromValue_(issues[r][ii.DUE_DATE]); if(!due||due>=today)continue;
+    const last=asDate_(issues[r][ii.OVERDUE_NOTIFIED_AT]); if(last && now-last<86400000)continue;
+    const owner=String(issues[r][ii.OWNER_COMPUTER_NO]||issues[r][ii.CREATED_BY]||'');
+    const visitId=String(issues[r][ii.VISIT_ID]||''), station=String(issues[r][ii.STATION_NAME]||issues[r][ii.STATION_NO]||'');
+    if(status==='AWAITING_VERIFICATION'){
+      const v=findVisitObjectById_(visitId); const ap=v?String(v.APPROVER_COMPUTER_NO||''):'';
+      if(ap)notify_(ap,'ISSUE_VERIFY_OVERDUE','معالجة تنتظر التحقق','المشرف رفع معالجة للملاحظة '+String(issues[r][ii.ISSUE_ID]||'')+' في '+station+' وتحتاج تحققك.',String(issues[r][ii.ISSUE_ID]||''),'SYSTEM');
+    }else{
+      if(ii.STATUS!==undefined)issuesSh.getRange(r+1,ii.STATUS+1).setValue('OVERDUE');
+      if(owner)notify_(owner,'ISSUE_OVERDUE','ملاحظة تجاوزت المهلة','الزيارة '+visitId+' بتاريخ '+(function(){const vv=findVisitObjectById_(visitId);return vv?dateKeyFromValue_(vv.DATE):'';})()+' — '+station+' — الملاحظة: '+String(issues[r][ii.ITEM_TEXT]||'')+' انتهت مهلة معالجتها.',String(issues[r][ii.ISSUE_ID]||''),'SYSTEM');
+      const v=findVisitObjectById_(visitId); const ap=v?String(v.APPROVER_COMPUTER_NO||''):'';
+      if(ap)notify_(ap,'ISSUE_OVERDUE_APPROVER','ملاحظة متأخرة لدى مشرف','الزيارة '+visitId+' — '+station+' — لم تُغلق الملاحظة ضمن المهلة.',String(issues[r][ii.ISSUE_ID]||''),'SYSTEM');
+    }
+    if(ii.OVERDUE_NOTIFIED_AT!==undefined)issuesSh.getRange(r+1,ii.OVERDUE_NOTIFIED_AT+1).setValue(now);
+    issueAlerts++;
+  }
+
+  for(let r=1;r<plans.length;r++){
+    if(!toBool_(plans[r][pi.ACTIVE]))continue;
+    const end=pi.END_DATE!==undefined?dateKeyFromValue_(plans[r][pi.END_DATE]):''; if(end&&today>end)continue;
+    const due=(pi.NEXT_DUE_DATE!==undefined?dateKeyFromValue_(plans[r][pi.NEXT_DUE_DATE]):'') || dateKeyFromValue_(plans[r][pi.START_DATE]);
+    if(!due)continue;
+    const grace=Number((pi.GRACE_DAYS!==undefined?plans[r][pi.GRACE_DAYS]:'')||settingValue_('PLAN_GRACE_DAYS','0'));
+    const alertAfter=dateAddDaysKey_(due,grace);
+    if(today<=alertAfter)continue;
+    const key=due+'|'+String(plans[r][pi.VISIT_TYPE]||'');
+    if(pi.LAST_MISSED_ALERT_KEY!==undefined && String(plans[r][pi.LAST_MISSED_ALERT_KEY]||'')===key)continue;
+    const sup=String(plans[r][pi.COMPUTER_NO]||''), st=String(plans[r][pi.STATION_NO]||''), typ=String(plans[r][pi.VISIT_TYPE]||'');
+    const station=findStation_(st); const ap=(pi.APPROVER_COMPUTER_NO!==undefined?String(plans[r][pi.APPROVER_COMPUTER_NO]||''):'') || resolveApproverForSupervisor_(sup,station);
+    notify_(sup,'VISIT_MISSED','زيارة مقررة متأخرة','المحطة '+st+' — '+String(APP.VISIT_TYPES[typ]||typ)+' كانت مستحقة بتاريخ '+due+'.',String(plans[r][pi.PLAN_ID]||''),'SYSTEM');
+    if(ap)notify_(ap,'SUPERVISOR_MISSED_VISIT','مشرف لم ينفذ زيارة مقررة','المشرف '+sup+' لم ينفذ زيارة '+String(APP.VISIT_TYPES[typ]||typ)+' للمحطة '+st+' المستحقة '+due+'.',String(plans[r][pi.PLAN_ID]||''),'SYSTEM');
+    if(pi.LAST_MISSED_ALERT_KEY!==undefined)plansSh.getRange(r+1,pi.LAST_MISSED_ALERT_KEY+1).setValue(key);
+    missedAlerts++;
+  }
+  invalidateAllSheetCache_();
+  Logger.log(JSON.stringify({approvalAlerts:approvalAlerts,issueAlerts:issueAlerts,missedAlerts:missedAlerts}));
+  return {ok:true,approvalAlerts:approvalAlerts,issueAlerts:issueAlerts,missedAlerts:missedAlerts};
+}
+
+function migrateWorkflowData_(){
+  const ss=getDb_(), visitsSh=ss.getSheetByName(APP.SHEETS.VISITS), issuesSh=ss.getSheetByName(APP.SHEETS.ISSUES), plansSh=ss.getSheetByName(APP.SHEETS.VISIT_PLANS);
+  const v=visitsSh.getDataRange().getValues(), vi=headerMap_(v[0]||[]), sla=Number(settingValue_('APPROVAL_SLA_HOURS','48'));
+  for(let r=1;r<v.length;r++){
+    const no=String(v[r][vi.COMPUTER_NO]||''), st=String(v[r][vi.STATION_NO]||''), ap=vi.APPROVER_COMPUTER_NO!==undefined?String(v[r][vi.APPROVER_COMPUTER_NO]||''):'';
+    const patch={};
+    if(!ap)patch.APPROVER_COMPUTER_NO=resolveApproverForSupervisor_(no,findStation_(st));
+    if(vi.SUBMITTED_AT!==undefined&&!v[r][vi.SUBMITTED_AT])patch.SUBMITTED_AT=v[r][vi.COMPLETED_AT]||new Date();
+    if(String(v[r][vi.APPROVAL_STATUS]||'PENDING')==='PENDING'&&vi.APPROVAL_DUE_AT!==undefined&&!v[r][vi.APPROVAL_DUE_AT])patch.APPROVAL_DUE_AT=dateTimeAddHours_(v[r][vi.COMPLETED_AT]||new Date(),sla);
+    if(vi.WORKFLOW_STATUS!==undefined&&!v[r][vi.WORKFLOW_STATUS])patch.WORKFLOW_STATUS=String(v[r][vi.APPROVAL_STATUS]||'PENDING')==='APPROVED'?(Number(v[r][vi.FAIL_COUNT]||0)>0?'FOLLOW_UP':'CLOSED'):(String(v[r][vi.APPROVAL_STATUS]||'PENDING')==='REJECTED'?'REJECTED':'PENDING_APPROVAL');
+    if(Object.keys(patch).length)patchRowByNumber_(visitsSh,r+1,patch);
+  }
+  const checklist=sheetObjects_(ss.getSheetByName(APP.SHEETS.CHECKLIST)), cm={};checklist.forEach(function(x){cm[String(x.ITEM_ID||'')]=x;});
+  const issues=issuesSh.getDataRange().getValues(), ii=headerMap_(issues[0]||[]);
+  for(let r=1;r<issues.length;r++){
+    const patch={}, item=cm[String(issues[r][ii.ITEM_ID]||'')]||{},days=Math.max(1,Number((ii.DUE_DAYS!==undefined?issues[r][ii.DUE_DAYS]:'')||item.REMEDIATION_DAYS||settingValue_('ISSUE_DEFAULT_REMEDIATION_DAYS','7')));
+    if(ii.DUE_DAYS!==undefined&&!issues[r][ii.DUE_DAYS])patch.DUE_DAYS=days;
+    const visit=findVisitObjectById_(String(issues[r][ii.VISIT_ID]||''));
+    if(visit&&String(visit.APPROVAL_STATUS||'')==='APPROVED'){
+      if(String(issues[r][ii.STATUS]||'')==='PENDING_APPROVAL'||!String(issues[r][ii.STATUS]||''))patch.STATUS='OPEN';
+      if(ii.APPROVED_AT!==undefined&&!issues[r][ii.APPROVED_AT])patch.APPROVED_AT=visit.APPROVED_AT||new Date();
+      if(ii.DUE_DATE!==undefined&&!issues[r][ii.DUE_DATE])patch.DUE_DATE=dateAddDaysKey_(dateKeyFromValue_(visit.APPROVED_AT)||dateKey_(new Date()),days);
+    }
+    if(Object.keys(patch).length)patchRowByNumber_(issuesSh,r+1,patch);
+  }
+  const plans=plansSh.getDataRange().getValues(), pi=headerMap_(plans[0]||[]);
+  for(let r=1;r<plans.length;r++){
+    const patch={}, sup=String(plans[r][pi.COMPUTER_NO]||''), st=String(plans[r][pi.STATION_NO]||'');
+    if(pi.APPROVER_COMPUTER_NO!==undefined&&!plans[r][pi.APPROVER_COMPUTER_NO])patch.APPROVER_COMPUTER_NO=resolveApproverForSupervisor_(sup,findStation_(st));
+    if(pi.NEXT_DUE_DATE!==undefined&&!plans[r][pi.NEXT_DUE_DATE])patch.NEXT_DUE_DATE=dateKeyFromValue_(plans[r][pi.START_DATE]);
+    if(pi.GRACE_DAYS!==undefined&&plans[r][pi.GRACE_DAYS]==='')patch.GRACE_DAYS=Number(settingValue_('PLAN_GRACE_DAYS','0'));
+    // V8.1: تحويل دورة BIWEEKLY القديمة إلى أسبوعية (7 أيام) مع الحفاظ على مرساة أول زيارة.
+    if(String(plans[r][pi.VISIT_TYPE]||'')==='BIWEEKLY' && pi.ANCHOR_DATE!==undefined){
+      const anchor=dateKeyFromValue_(plans[r][pi.ANCHOR_DATE]);
+      const last=pi.LAST_VISIT_DATE!==undefined?dateKeyFromValue_(plans[r][pi.LAST_VISIT_DATE]):'';
+      if(anchor)patch.NEXT_DUE_DATE=nextDueFromAnchor_(anchor,'BIWEEKLY',last||anchor);
+    }
+    if(Object.keys(patch).length)patchRowByNumber_(plansSh,r+1,patch);
+  }
+  return {ok:true};
+}

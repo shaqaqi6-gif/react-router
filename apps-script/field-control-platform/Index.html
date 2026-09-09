@@ -309,6 +309,35 @@ td strong{color:var(--dark);font-weight:600}
 .visit-type strong{display:block;color:var(--dark);font-size:13px}
 .visit-type span{display:block;color:var(--muted);font-size:11px;margin-top:4px;line-height:1.5}
 .compact-visits .visit-type{min-height:84px}
+/* V8.2 — حالة أنواع الزيارة */
+.visit-type.locked{opacity:.62;background:#F6F8FA;border-color:var(--line);cursor:help}
+.visit-type.locked:hover{border-color:var(--line-strong)}
+.visit-type.locked strong{color:var(--muted)}
+.visit-type.locked .visit-icon{background:var(--surface-2);color:var(--faint)}
+.visit-type-hint{display:block;color:var(--muted);font-size:10px;margin-top:5px;line-height:1.5}
+.visit-type-lock{display:inline-block;margin-top:6px;font-size:10px;font-weight:700;color:var(--faint);border:1px solid var(--line-strong);border-radius:99px;padding:1px 8px}
+.visit-gate.suggest{border-color:var(--blue-100);background:var(--blue-50)}
+.visit-gate.suggest strong{color:var(--dark)}
+.visit-gate.suggest p{color:var(--mid)}
+/* جدول حالة الزيارات داخل ملف المشرف */
+.gate-list{display:grid;gap:8px}
+.gate-row{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(2,minmax(150px,1fr));gap:10px;align-items:stretch;border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px;background:#fff}
+.gate-station{min-width:0;align-self:center}
+.gate-station strong{display:block;color:var(--dark);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gate-station span{display:block;color:var(--muted);font-size:10px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.gate-cell{min-width:0;border-right:1px solid var(--line);padding-right:10px;display:flex;flex-direction:column;gap:4px;align-items:flex-start}
+.gate-cell small{color:var(--muted);font-size:10px;font-weight:600}
+.gate-cell b{font-size:11px;font-weight:700;color:var(--ink);line-height:1.5}
+.gate-cell.open b{color:var(--ok)}
+.gate-cell.unlocked b{color:var(--mid)}
+.gate-cell.done b{color:var(--muted)}
+.gate-cell.closed b{color:var(--faint)}
+.gate-cell .gate-unlock{margin-top:2px;min-height:30px;padding:4px 12px;font-size:11px}
+@media (max-width:680px){
+  .gate-row{grid-template-columns:1fr 1fr}
+  .gate-station{grid-column:1 / -1}
+  .gate-cell{border-right:0;border-top:1px solid var(--line);padding:8px 0 0}
+}
 
 /* ---------- checklist (field) ---------- */
 .checklist-top{position:sticky;top:var(--topbar-h);z-index:45;background:rgba(243,246,249,.94);backdrop-filter:blur(10px);padding:8px 0 10px}
