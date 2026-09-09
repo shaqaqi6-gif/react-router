@@ -63,55 +63,27 @@ h1,h2,h3{font-weight:700;letter-spacing:-.01em}
 .login-points{display:grid;gap:10px;margin-top:26px}
 .login-points div{display:flex;align-items:center;gap:10px;font-size:13px;opacity:.95}
 .login-points span{width:30px;height:30px;border-radius:9px;background:rgba(255,255,255,.14);display:grid;place-items:center;font-weight:700;flex:none}
-/* ===== V9.0.0: مشهد محطة الوقود في شاشة الدخول ===== */
-.login-scene{margin-top:14px;position:relative;touch-action:manipulation;user-select:none}
+/* ===== V9.0.0: مسدس التعبئة في شاشة الدخول — حركة بطيئة هادئة ===== */
+.login-scene{margin-top:10px;margin-bottom:8px;position:relative;user-select:none}
 .scene-svg{width:100%;height:auto;display:block;overflow:visible}
-.scene-layer{transition:transform .35s cubic-bezier(.2,.7,.2,1);will-change:transform}
-.canopy{fill:rgba(255,255,255,.22);stroke:rgba(255,255,255,.35)}
-.canopy-lights circle{fill:#FFE9A8;filter:url(#sceneGlow);animation:lightGlow 2.6s ease-in-out infinite}
-.canopy-lights circle:nth-child(2){animation-delay:.4s}.canopy-lights circle:nth-child(3){animation-delay:.8s}.canopy-lights circle:nth-child(4){animation-delay:1.2s}.canopy-lights circle:nth-child(5){animation-delay:1.6s}
-@keyframes lightGlow{0%,100%{opacity:.55}50%{opacity:1}}
-.pillar{fill:rgba(255,255,255,.16)}
-.ground{stroke:rgba(255,255,255,.45);stroke-width:2;stroke-linecap:round}
-.road{stroke:rgba(255,255,255,.28);stroke-width:3;stroke-dasharray:18 14;animation:roadMove 1.4s linear infinite}
-@keyframes roadMove{to{stroke-dashoffset:-32}}
-.pump-body{fill:url(#pumpG);stroke:rgba(255,255,255,.4);stroke-width:1.2}
-.pump-top{fill:rgba(255,255,255,.28)}
-.pump-screen{fill:#0F2A50;stroke:rgba(255,255,255,.25)}
-.screen-label{fill:rgba(255,255,255,.7);font-size:9px;text-anchor:end;font-family:var(--font)}
-.screen-num{fill:#7FDBFF;font-size:22px;font-weight:700;text-anchor:end;font-family:"Segoe UI",Arial,sans-serif;font-variant-numeric:tabular-nums;letter-spacing:.5px}
-.screen-unit{fill:rgba(255,255,255,.55);font-size:11px;font-weight:700;font-family:Arial,sans-serif}
-.gauge-track{fill:none;stroke:rgba(255,255,255,.22);stroke-width:6;stroke-linecap:round}
-.gauge-fill{fill:none;stroke:url(#fuelG);stroke-width:6;stroke-linecap:round;stroke-dasharray:114;stroke-dashoffset:114;transition:stroke-dashoffset .25s linear}
-.gauge-e,.gauge-f{fill:rgba(255,255,255,.7);font-size:9px;font-weight:700;text-anchor:middle;font-family:Arial,sans-serif}
-.gauge-needle line{stroke:#fff;stroke-width:2.5;stroke-linecap:round}.gauge-needle circle{fill:#fff}
-.gauge-needle{transition:transform .25s linear}
-.hose-dock{fill:rgba(255,255,255,.35)}
-.hose{fill:none;stroke:#0F2A50;stroke-width:7;stroke-linecap:round;opacity:.9}
-.hose-flow{fill:none;stroke:#7FDBFF;stroke-width:3;stroke-linecap:round;stroke-dasharray:10 12;opacity:.25;transition:opacity .3s}
-.login-scene.filling .hose-flow{opacity:1;animation:flow .5s linear infinite}
-@keyframes flow{to{stroke-dashoffset:-22}}
-.nozzle{cursor:pointer;transform-box:fill-box;transform-origin:60% 40%;transition:transform .25s cubic-bezier(.2,1.3,.4,1);filter:drop-shadow(0 6px 10px rgba(0,0,0,.25))}
-.nozzle:hover{transform:scale(1.05) rotate(-3deg)}
-.login-scene.filling .nozzle{transform:scale(1.06) rotate(-6deg) translate(-4px,4px)}
-.nz-body,.nz-spout,.nz-handle{fill:url(#nozzleG);stroke:rgba(255,255,255,.6);stroke-width:1.2;stroke-linejoin:round}
-.nz-shine{fill:rgba(255,255,255,.45)}
-.nz-trigger{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
-.nz-led{fill:#FFE9A8;transition:fill .2s}.login-scene.filling .nz-led{fill:#1FC27A;filter:url(#sceneGlow)}
-.drops circle{fill:#7FDBFF;opacity:0}
-.login-scene.filling .drops circle{animation:drop 1.5s ease-in infinite;animation-delay:var(--d)}
-@keyframes drop{0%{transform:translateY(0);opacity:0}15%{opacity:1}100%{transform:translateY(52px);opacity:0}}
-.tank-body{fill:rgba(255,255,255,.12);stroke:rgba(255,255,255,.35)}
-.tank-fuel{fill:url(#fuelG);opacity:.85;transition:transform .25s linear}
-.tank-label{fill:#fff;font-size:10px;font-weight:700;text-anchor:middle;font-family:var(--font);paint-order:stroke;stroke:rgba(15,42,80,.5);stroke-width:3}
-.scene-stamp{transform-box:fill-box;transform-origin:center;opacity:0;transform:scale(.4) rotate(-8deg);transition:opacity .25s,transform .45s cubic-bezier(.2,1.5,.4,1)}
-.scene-stamp.show{opacity:1;transform:scale(1) rotate(0)}
-.scene-stamp rect{fill:#1FC27A}.scene-stamp path{fill:none;stroke:#fff;stroke-width:3;stroke-linecap:round;stroke-linejoin:round}
-.scene-stamp text{fill:#fff;font-size:11px;font-weight:700;font-family:var(--font);text-anchor:middle}
-.scene-caption{display:flex;align-items:baseline;gap:10px;margin-top:8px;font-size:13px;min-height:22px}
-.scene-caption strong{font-size:14px}.scene-caption span{opacity:.8}
-.scene-caption.flip span{animation:captionFlip .45s}
-@keyframes captionFlip{0%{opacity:0;translate:0 6px}100%{opacity:.8;translate:0 0}}
+.scene-layer{transition:transform .6s cubic-bezier(.2,.7,.2,1);will-change:transform}
+.halo{animation:haloBreath 6s ease-in-out infinite;transform-box:fill-box;transform-origin:center}
+@keyframes haloBreath{0%,100%{opacity:.6;transform:scale(.94)}50%{opacity:1;transform:scale(1.04)}}
+.hose{stroke:url(#hoseG);stroke-width:14;stroke-linecap:round;opacity:.95}
+.hose-flow{stroke:#7FDBFF;stroke-width:3;stroke-linecap:round;stroke-dasharray:14 26;opacity:.55;animation:hoseFlow 5s linear infinite}
+@keyframes hoseFlow{to{stroke-dashoffset:-80}}
+.nozzle-float{animation:nozzleFloat 6s ease-in-out infinite}
+@keyframes nozzleFloat{0%,100%{translate:0 0}50%{translate:0 -5px}}
+.nozzle{filter:drop-shadow(0 14px 18px rgba(8,30,60,.35))}
+.nz-spout-shadow{stroke:rgba(8,30,60,.25);stroke-width:16;stroke-linecap:round}
+.nz-spout{stroke:url(#nozzleG);stroke-width:16;stroke-linecap:round}
+.nz-spout-hl{stroke:rgba(255,255,255,.45);stroke-width:3;stroke-linecap:round}
+.nz-coupling{fill:#12355F;stroke:rgba(255,255,255,.25)}
+.nz-body,.nz-handle{fill:url(#nozzleG);stroke:rgba(255,255,255,.55);stroke-width:1.2;stroke-linejoin:round}
+.nz-shine{fill:rgba(255,255,255,.4)}
+.nz-guard{stroke:rgba(255,255,255,.85);stroke-width:6;stroke-linecap:round;stroke-linejoin:round}
+.nz-sweep{animation:nozzleSweep 7s ease-in-out infinite;transform:translateX(-40px)}
+@keyframes nozzleSweep{0%,55%{transform:translateX(-40px) skewX(-18deg)}80%,100%{transform:translateX(150px) skewX(-18deg)}}
 .login-brand small{opacity:.65;font-size:11px}
 .login-form{padding:48px 44px;display:flex;flex-direction:column;justify-content:center}
 .login-title{margin:0;color:var(--dark);font-size:24px}
@@ -674,7 +646,7 @@ td strong{color:var(--dark);font-weight:600}
   .login-brand{min-height:0;padding:28px 26px}
   .login-brand h2{font-size:22px;margin-top:18px}
   .login-points{display:none}
-  .login-scene{max-width:420px;margin:12px auto 0}.scene-svg{max-height:170px}
+  .login-scene{max-width:360px;margin:6px auto 0}.scene-svg{max-height:150px}
   .login-form{padding:30px 26px}
 }
 @media (max-width:680px){
@@ -815,8 +787,8 @@ input[type="file"]{width:100%}
 
 @media (prefers-reduced-motion:reduce){
   .tap-ring,.tap-dot{display:none!important}
-  .canopy-lights circle,.road,.hose-flow,.drops circle,.nozzle,.scene-layer,.gauge-needle,.gauge-fill,.tank-fuel,.scene-stamp{animation:none!important;transition:none!important}
-  .hose-flow{opacity:1}
+  .halo,.hose-flow,.nozzle-float,.nz-sweep,.scene-layer{animation:none!important;transition:none!important}
+  .nz-sweep{display:none}
   .page.page-enter>*,.modal,.modal-backdrop,.modal-backdrop.closing,.modal-backdrop.closing .modal,.nav-btn.active:after,.decision button.selected{animation:none!important}
   .btn:active,.icon-btn:active,.nav-btn:active,.kpi:active,.station-card:active,.visit-type:active,.dash-decision-row:active,.dash-scope-stat:active,.bar-row:active,.decision button:active,.top-logo-home:active{transform:none!important}
 }
@@ -839,69 +811,35 @@ input[type="file"]{width:100%}
         <div>
           <img class="brand-logo" alt="شعار شركة الدريس" data-aldrees-logo>
           <h2>منصة الرقابة<br>والزيارات الميدانية</h2>
-          <!-- V9.0.0: مشهد محطة وقود متحرك — المس مسدس التعبئة لتبدأ التعبئة -->
+          <!-- V9.0.0: مسدس تعبئة أزرق بحركة هادئة — بلا نص -->
           <div class="login-scene" id="loginScene" aria-hidden="true">
-            <svg class="scene-svg" viewBox="0 0 420 270" preserveAspectRatio="xMidYMid meet">
+            <svg class="scene-svg" viewBox="0 0 420 250" preserveAspectRatio="xMidYMid meet">
               <defs>
-                <linearGradient id="nozzleG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#2DB8F0"/><stop offset="1" stop-color="#0077B6"/></linearGradient>
-                <linearGradient id="pumpG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="rgba(255,255,255,.22)"/><stop offset="1" stop-color="rgba(255,255,255,.08)"/></linearGradient>
-                <linearGradient id="fuelG" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#009DDF"/><stop offset="1" stop-color="#7FDBFF"/></linearGradient>
-                <filter id="sceneGlow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.5" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-                <clipPath id="tankClip"><rect x="30" y="196" width="150" height="40" rx="10"/></clipPath>
+                <linearGradient id="nozzleG" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#3EC6F7"/><stop offset="1" stop-color="#0079BC"/></linearGradient>
+                <linearGradient id="hoseG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#0F2A50"/><stop offset="1" stop-color="#1A3F73"/></linearGradient>
+                <radialGradient id="haloG"><stop offset="0" stop-color="#7FDBFF" stop-opacity=".35"/><stop offset="1" stop-color="#7FDBFF" stop-opacity="0"/></radialGradient>
+                <linearGradient id="sweepG" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#fff" stop-opacity="0"/><stop offset=".5" stop-color="#fff" stop-opacity=".45"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></linearGradient>
+                <clipPath id="nozzleClip"><rect x="146" y="84" width="96" height="46" rx="18"/><path d="M206 130 v40 q0 14 14 14 h6 q14 0 14 -14 v-40 z"/></clipPath>
               </defs>
-              <!-- المظلة والأعمدة -->
+              <circle class="halo" cx="200" cy="130" r="120" fill="url(#haloG)"/>
               <g class="scene-layer" data-depth="1">
-                <rect class="canopy" x="14" y="14" width="392" height="16" rx="8"/>
-                <g class="canopy-lights"><circle cx="60" cy="22" r="3"/><circle cx="140" cy="22" r="3"/><circle cx="220" cy="22" r="3"/><circle cx="300" cy="22" r="3"/><circle cx="380" cy="22" r="3"/></g>
-                <rect class="pillar" x="386" y="30" width="8" height="206" rx="3"/>
-                <rect class="pillar" x="20" y="30" width="8" height="120" rx="3"/>
-                <path class="ground" d="M8 236 H412"/>
-                <path class="road" d="M8 254 H412"/>
+                <path class="hose" d="M256 108 C 300 108, 318 140, 326 180 S 372 236, 414 216" fill="none"/>
+                <path class="hose-flow" d="M256 108 C 300 108, 318 140, 326 180 S 372 236, 414 216" fill="none"/>
               </g>
-              <g class="scene-layer" data-depth="2">
-                <!-- المضخة -->
-                <g class="pump">
-                  <rect class="pump-body" x="238" y="62" width="120" height="174" rx="16"/>
-                  <rect class="pump-top" x="252" y="52" width="92" height="16" rx="8"/>
-                  <rect class="pump-screen" x="252" y="80" width="92" height="60" rx="10"/>
-                  <text class="screen-label" x="332" y="97">اللترات</text>
-                  <text class="screen-num" id="sceneLitres" x="332" y="126">0.00</text>
-                  <text class="screen-unit" x="264" y="126">L</text>
-                  <!-- عدّاد الخزان (مؤشر E→F) -->
-                  <path class="gauge-track" d="M262 192 A36 36 0 0 1 334 192"/>
-                  <path class="gauge-fill" id="sceneGaugeFill" d="M262 192 A36 36 0 0 1 334 192"/>
-                  <text class="gauge-e" x="258" y="206">E</text><text class="gauge-f" x="332" y="206">F</text>
-                  <g class="gauge-needle" id="sceneNeedle" transform="translate(298 192)"><line x1="0" y1="0" x2="0" y2="-30"/><circle r="4"/></g>
-                  <!-- ختم الاعتماد -->
-                  <g transform="translate(298 160)"><g class="scene-stamp" id="sceneStamp">
-                    <rect x="-40" y="-13" width="80" height="26" rx="13"/><path d="M-30 0l6 6 11-12"/><text x="9" y="4">معتمدة</text>
-                  </g></g>
-                  <!-- مقبس الخرطوم -->
-                  <rect class="hose-dock" x="228" y="98" width="14" height="22" rx="4"/>
-                </g>
-                <!-- الخرطوم وتدفق الوقود -->
-                <path class="hose" d="M232 109 C 200 109, 236 42, 190 42 C 150 42, 176 118, 176 118"/>
-                <path class="hose-flow" d="M232 109 C 200 109, 236 42, 190 42 C 150 42, 176 118, 176 118"/>
-                <!-- مسدس التعبئة الأزرق -->
-                <g class="nozzle" id="sceneNozzle">
-                  <rect class="nz-body" x="126" y="110" width="66" height="34" rx="9"/>
-                  <rect class="nz-shine" x="134" y="116" width="40" height="6" rx="3"/>
-                  <path class="nz-spout" d="M126 118 H100 q-10 0 -10 10 v14 h16 v-8 h20 z"/>
-                  <path class="nz-handle" d="M170 144 v26 q0 9 9 9 h4 q9 0 9 -9 v-26 z"/>
-                  <path class="nz-trigger" d="M146 144 v12 q0 7 7 7 h12"/>
-                  <circle class="nz-led" cx="184" cy="120" r="3"/>
-                </g>
-                <!-- قطرات -->
-                <g class="drops" transform="translate(98 144)"><circle r="3" style="--d:0s"/><circle r="2.4" style="--d:.5s"/><circle r="2" style="--d:1s"/></g>
-                <!-- خزان يمتلئ -->
-                <g class="tank">
-                  <rect class="tank-body" x="30" y="196" width="150" height="40" rx="10"/>
-                  <g clip-path="url(#tankClip)"><rect class="tank-fuel" id="sceneTankFuel" x="30" y="236" width="150" height="40"/></g>
-                  <text class="tank-label" x="105" y="221">مستوى المخزون</text>
+              <g class="scene-layer nozzle-float" data-depth="2">
+                <g class="nozzle" transform="rotate(-10 200 125)">
+                  <path class="nz-spout-shadow" d="M150 107 H96 q-14 0 -14 14 v20" fill="none"/>
+                  <path class="nz-spout" d="M150 104 H96 q-14 0 -14 14 v18" fill="none"/>
+                  <path class="nz-spout-hl" d="M146 99 H98" fill="none"/>
+                  <rect class="nz-coupling" x="236" y="94" width="22" height="28" rx="7"/>
+                  <rect class="nz-body" x="146" y="84" width="96" height="46" rx="18"/>
+                  <rect class="nz-shine" x="162" y="93" width="48" height="7" rx="3.5"/>
+                  <path class="nz-handle" d="M206 130 v40 q0 14 14 14 h6 q14 0 14 -14 v-40 z"/>
+                  <path class="nz-guard" d="M176 130 v20 q0 12 12 12 h18" fill="none"/>
+                  <rect class="nz-sweep" x="120" y="60" width="40" height="140" fill="url(#sweepG)" clip-path="url(#nozzleClip)"/>
                 </g>
               </g>
             </svg>
-            <div class="scene-caption"><strong id="sceneStation">محطة الواحة</strong><span id="sceneStep">المس مسدس التعبئة لتبدأ الجولة</span></div>
           </div>
         </div>
         <small>نظام داخلي — شركة الدريس للخدمات البترولية والنقليات</small>
@@ -1028,54 +966,14 @@ var ALDREES_LOGO_B64 = [
 'OTqQDqSPDqQD6aMD6UD66EA6kD46kA6kT8LfAiLIu4+/M8Q/RaRNl0ov8gkAAAAASUVORK5CYII='
 ].join('').replace(/[^A-Za-z0-9+\/=]/g, '');
 var ALDREES_LOGO_DATA_URI = 'data:image/png;base64,' + ALDREES_LOGO_B64;
-/* V9.0.0: مشهد محطة الوقود — المس المسدس (أو انتظر) لتبدأ التعبئة: العدّاد يعدّ، المؤشر يتحرك من E إلى F،
-   الخزان يمتلئ، ثم يظهر ختم «معتمدة» وتنتقل الجولة إلى المحطة التالية. ميلان خفيف مع المؤشر. */
+/* V9.0.0: مسدس التعبئة — ميلان خفيف جدًا مع حركة المؤشر، لا أكثر */
 (function(){
   var scene=document.getElementById('loginScene');if(!scene)return;
-  var reduce=window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches;
-  var layers=scene.querySelectorAll('.scene-layer'),nozzle=document.getElementById('sceneNozzle');
-  var litresEl=document.getElementById('sceneLitres'),needle=document.getElementById('sceneNeedle'),gauge=document.getElementById('sceneGaugeFill'),
-      tank=document.getElementById('sceneTankFuel'),stamp=document.getElementById('sceneStamp'),
-      stationEl=document.getElementById('sceneStation'),stepEl=document.getElementById('sceneStep'),cap=scene.querySelector('.scene-caption');
-  var stations=['محطة الواحة','محطة النخيل','محطة الخليج','محطة الياسمين'];
-  var FULL=45, litres=0, filling=false, idx=0, raf=null, last=0, idleTimer=null;
-  function paint(){
-    var r=Math.min(litres/FULL,1);
-    litresEl.textContent=litres.toFixed(2);
-    needle.setAttribute('transform','translate(298 192) rotate('+((r*180)-90)+')');
-    gauge.style.strokeDashoffset=String(114-114*r);
-    tank.setAttribute('transform','translate(0 '+(-40*r)+')');
-  }
-  function say(t){stepEl.textContent=t;cap.classList.remove('flip');void stepEl.offsetWidth;cap.classList.add('flip');}
-  function step(ts){
-    if(!filling)return;
-    var dt=last?(ts-last)/1000:0;last=ts;
-    litres=Math.min(FULL,litres+dt*11);paint();
-    if(litres>=FULL){finish();return}
-    raf=requestAnimationFrame(step);
-  }
-  function start(){
-    if(filling||litres>=FULL)return;
-    filling=true;last=0;scene.classList.add('filling');say('جارٍ التعبئة — زيارة موثّقة بالموقع والصور');
-    raf=requestAnimationFrame(step);
-  }
-  function pause(){if(!filling)return;filling=false;scene.classList.remove('filling');cancelAnimationFrame(raf);if(litres<FULL)say('توقّف مؤقت — المس المسدس للمتابعة');}
-  function finish(){
-    filling=false;scene.classList.remove('filling');cancelAnimationFrame(raf);
-    stamp.classList.add('show');say('اكتملت الزيارة — اعتماد مساعد الإشراف');
-    setTimeout(function(){
-      stamp.classList.remove('show');idx=(idx+1)%stations.length;stationEl.textContent=stations[idx];
-      litres=0;paint();say('المحطة التالية — المس المسدس لتبدأ');schedule();
-    },2600);
-  }
-  function schedule(){clearTimeout(idleTimer);if(reduce)return;idleTimer=setTimeout(function(){var lv=document.getElementById('loginView');if(lv&&!lv.classList.contains('hidden'))start();},3200);}
-  nozzle.addEventListener('pointerdown',function(e){e.preventDefault();clearTimeout(idleTimer);if(filling)pause();else start();});
-  nozzle.addEventListener('mouseenter',function(){clearTimeout(idleTimer);if(!filling&&litres<FULL)start();});
-  function tilt(x,y){if(reduce)return;layers.forEach(function(l){var d=Number(l.getAttribute('data-depth')||1);l.style.transform='translate('+(x*4*d).toFixed(1)+'px,'+(y*3*d).toFixed(1)+'px)';});}
+  if(window.matchMedia&&window.matchMedia('(prefers-reduced-motion:reduce)').matches)return;
+  var layers=scene.querySelectorAll('.scene-layer');
+  function tilt(x,y){layers.forEach(function(l){var d=Number(l.getAttribute('data-depth')||1);l.style.transform='translate('+(x*3*d).toFixed(1)+'px,'+(y*2*d).toFixed(1)+'px)';});}
   scene.addEventListener('pointermove',function(e){var r=scene.getBoundingClientRect();tilt((e.clientX-r.left)/r.width-.5,(e.clientY-r.top)/r.height-.5);});
   scene.addEventListener('pointerleave',function(){tilt(0,0);});
-  if(reduce){litres=FULL;paint();stamp.classList.add('show');say('زيارات موثّقة، اعتماد، ومتابعة حتى الإغلاق');}
-  else{paint();schedule();}
 })();
 document.querySelectorAll('[data-aldrees-logo]').forEach(function(img){
   img.onerror = function(){ this.replaceWith(Object.assign(document.createElement('div'), {className:'brand-logo-fallback', textContent:'الدريس'})); };
