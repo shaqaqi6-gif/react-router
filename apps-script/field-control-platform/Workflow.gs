@@ -16,9 +16,14 @@ function userByNo_(computerNo) {
 }
 
 function resolveApproverForSupervisor_(computerNo, station) {
+  /* V8.2.1: لا يجوز أن يكون المعتمِد هو منفّذ الزيارة نفسه.
+     canApproveVisit_ ترفض اعتماد المرء لزيارته (وهذا صحيح رقابيًا)، فلو أُسندت الزيارة
+     إلى صاحبها بقيت معلّقة إلى الأبد ولا تظهر في طابور أحد. */
+  const self = String(computerNo||'');
   const u = userByNo_(computerNo);
-  if (u && String(u.APPROVER_COMPUTER_NO||'')) return String(u.APPROVER_COMPUTER_NO);
-  const users = sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(x){return toBool_(x.ACTIVE);});
+  const own = u ? String(u.APPROVER_COMPUTER_NO||'') : '';
+  if (own && own !== self) return own;
+  const users = sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(x){return toBool_(x.ACTIVE)&&String(x.COMPUTER_NO||'')!==self;});
   const region = station ? String(station.region||station.REGION||'') : '';
   const branch = station ? String(station.branch||station.BRANCH||'') : '';
   const preferred = ['APPROVAL_ASSISTANT','REGION_MANAGER','SUPERVISION_MANAGER','OPERATIONS_DEPUTY','OPERATIONS_MANAGER','SYSTEM_ADMIN'];
@@ -32,7 +37,11 @@ function resolveApproverForSupervisor_(computerNo, station) {
       if(mode==='ALL' || !regs.length || regs.indexOf(region)!==-1 || regs.indexOf(branch)!==-1) return String(users[i].COMPUTER_NO||'');
     }
   }
-  return APP.ADMIN.computerNo;
+  const manager = u ? String(u.MANAGER_COMPUTER_NO||'') : '';
+  if (manager && manager !== self) return manager;
+  // آخر ملاذ: مدير النظام المؤسس، ما لم يكن هو المنفّذ — عندها تُترك بلا إسناد
+  // ليلتقطها أي صاحب صلاحية اعتماد ضمن النطاق.
+  return APP.ADMIN.computerNo !== self ? APP.ADMIN.computerNo : '';
 }
 
 function managerForUser_(computerNo) {
@@ -46,7 +55,10 @@ function canApproveVisit_(session, visit) {
   if(session.roleId==='SYSTEM_ADMIN') return true;
   if(!hasPermission_(session,'VISIT_APPROVE')) return false;
   const assigned=String(visit.APPROVER_COMPUTER_NO||'');
-  if(assigned){
+  /* V8.2.1: إسناد الزيارة إلى منفّذها نفسه إسناد فاسد — نتجاهله ونمرّ لقاعدة النطاق
+     حتى لا تبقى الزيارة عالقة بلا أحد يستطيع اعتمادها. */
+  const selfAssigned=!!assigned&&assigned===String(visit.COMPUTER_NO||'');
+  if(assigned&&!selfAssigned){
     if(assigned===session.computerNo) return true;
     if(hasPermission_(session,'VISIT_VIEW_ALL')) return true;
     if(managerForUser_(assigned)===session.computerNo) return true;
@@ -459,7 +471,8 @@ function migrateWorkflowData_(){
   for(let r=1;r<v.length;r++){
     const no=String(v[r][vi.COMPUTER_NO]||''), st=String(v[r][vi.STATION_NO]||''), ap=vi.APPROVER_COMPUTER_NO!==undefined?String(v[r][vi.APPROVER_COMPUTER_NO]||''):'';
     const patch={};
-    if(!ap)patch.APPROVER_COMPUTER_NO=resolveApproverForSupervisor_(no,findStation_(st));
+    // V8.2.1: يُصلح أيضًا الزيارات المسندة إلى منفّذها نفسه (كانت تبقى معلّقة بلا معتمِد).
+    if(!ap||ap===no)patch.APPROVER_COMPUTER_NO=resolveApproverForSupervisor_(no,findStation_(st));
     if(vi.SUBMITTED_AT!==undefined&&!v[r][vi.SUBMITTED_AT])patch.SUBMITTED_AT=v[r][vi.COMPLETED_AT]||new Date();
     if(String(v[r][vi.APPROVAL_STATUS]||'PENDING')==='PENDING'&&vi.APPROVAL_DUE_AT!==undefined&&!v[r][vi.APPROVAL_DUE_AT])patch.APPROVAL_DUE_AT=dateTimeAddHours_(v[r][vi.COMPLETED_AT]||new Date(),sla);
     if(vi.WORKFLOW_STATUS!==undefined&&!v[r][vi.WORKFLOW_STATUS])patch.WORKFLOW_STATUS=String(v[r][vi.APPROVAL_STATUS]||'PENDING')==='APPROVED'?(Number(v[r][vi.FAIL_COUNT]||0)>0?'FOLLOW_UP':'CLOSED'):(String(v[r][vi.APPROVAL_STATUS]||'PENDING')==='REJECTED'?'REJECTED':'PENDING_APPROVAL');
@@ -481,7 +494,8 @@ function migrateWorkflowData_(){
   const plans=plansSh.getDataRange().getValues(), pi=headerMap_(plans[0]||[]);
   for(let r=1;r<plans.length;r++){
     const patch={}, sup=String(plans[r][pi.COMPUTER_NO]||''), st=String(plans[r][pi.STATION_NO]||'');
-    if(pi.APPROVER_COMPUTER_NO!==undefined&&!plans[r][pi.APPROVER_COMPUTER_NO])patch.APPROVER_COMPUTER_NO=resolveApproverForSupervisor_(sup,findStation_(st));
+    const planAp=pi.APPROVER_COMPUTER_NO!==undefined?String(plans[r][pi.APPROVER_COMPUTER_NO]||''):'';
+    if(pi.APPROVER_COMPUTER_NO!==undefined&&(!planAp||planAp===sup))patch.APPROVER_COMPUTER_NO=resolveApproverForSupervisor_(sup,findStation_(st));
     if(pi.NEXT_DUE_DATE!==undefined&&!plans[r][pi.NEXT_DUE_DATE])patch.NEXT_DUE_DATE=dateKeyFromValue_(plans[r][pi.START_DATE]);
     if(pi.GRACE_DAYS!==undefined&&plans[r][pi.GRACE_DAYS]==='')patch.GRACE_DAYS=Number(settingValue_('PLAN_GRACE_DAYS','0'));
     // V8.1: تحويل دورة BIWEEKLY القديمة إلى أسبوعية (7 أيام) مع الحفاظ على مرساة أول زيارة.

@@ -166,12 +166,51 @@ function uploadEvidence(token,visitId,itemId,dataUrl,fileName){
   return {ok:true,url:url,fileId:file.getId()};
 }
 
+/* V8.2.1 — طابور الاعتماد يعرض كل زيارة معلّقة داخل نطاق المستخدم، لا ما يستطيع اعتماده فقط.
+   كان يعرض ما يستطيع اعتماده وحده، فيظهر في لوحة القيادة رقم «بانتظار الاعتماد» ثم تفتح
+   الصفحة فتجدها فارغة — أوضح مثال: زيارة نفّذها المستخدم نفسه، فهو لا يعتمد زيارته.
+   الآن تظهر الزيارة ومعها سبب تعذّر القرار، فلا يتناقض الرقم مع الصفحة أبدًا. */
 function getApprovalQueue(token,filters){
   const session=requireSession_(token);requirePermission_(session,'VISIT_APPROVE');filters=filters||{};
-  return sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISITS)).filter(function(v){
-    if(String(v.APPROVAL_STATUS||'')!=='PENDING')return false; if(!canApproveVisit_(session,v))return false;
-    if(filters.region&&String(v.REGION||'')!==String(filters.region))return false; return true;
-  }).map(function(v){const o=visitListObjectForSession_(v,session);o.approverComputerNo=String(v.APPROVER_COMPUTER_NO||'');o.approvalDueAt=formatDateTimeSafe_(v.APPROVAL_DUE_AT);o.waitHours=Math.max(0,Math.round((new Date()-(asDate_(v.SUBMITTED_AT)||asDate_(v.COMPLETED_AT)||new Date()))/3600000));o.gpsStatus=String(v.GPS_MATCH_STATUS||'');if(canViewVisitGpsDetails_(session))o.gpsDistanceMeters=v.GPS_DISTANCE_M===''?'':Number(v.GPS_DISTANCE_M);return o;}).sort(function(a,b){return b.waitHours-a.waitHours;});
+  const names={};
+  sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).forEach(function(u){
+    names[String(u.COMPUTER_NO||'')]=String(u.NAME||'');
+  });
+  const nameOf=function(no){no=String(no||'');return no?(names[no]||no):'';};
+  const rows=[];
+  sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISITS)).forEach(function(v){
+    if(String(v.APPROVAL_STATUS||'')!=='PENDING')return;
+    if(filters.region&&String(v.REGION||'')!==String(filters.region))return;
+    const mine=String(v.COMPUTER_NO||'')===session.computerNo;
+    const canApprove=canApproveVisit_(session,v);
+    let blockReason='';
+    if(!canApprove){
+      if(mine){
+        blockReason='زيارة نفّذتها بنفسك — لا يمكنك اعتماد زيارتك. يعتمدها '+(nameOf(v.APPROVER_COMPUTER_NO)||'مساعد آخر')+'.';
+      }else if(visitAllowed_(session,v)){
+        const ap=nameOf(v.APPROVER_COMPUTER_NO);
+        blockReason=ap?('بانتظار قرار '+ap+'.'):'بانتظار قرار مساعد آخر.';
+      }else{
+        return; // خارج النطاق تمامًا — لا تُعرض
+      }
+    }
+    const o=visitListObjectForSession_(v,session);
+    o.approverComputerNo=String(v.APPROVER_COMPUTER_NO||'');
+    o.approverName=nameOf(v.APPROVER_COMPUTER_NO);
+    o.approvalDueAt=formatDateTimeSafe_(v.APPROVAL_DUE_AT);
+    o.waitHours=Math.max(0,Math.round((new Date()-(asDate_(v.SUBMITTED_AT)||asDate_(v.COMPLETED_AT)||new Date()))/3600000));
+    o.gpsStatus=String(v.GPS_MATCH_STATUS||'');
+    if(canViewVisitGpsDetails_(session))o.gpsDistanceMeters=v.GPS_DISTANCE_M===''?'':Number(v.GPS_DISTANCE_M);
+    o.canApprove=canApprove;
+    o.isMine=mine;
+    o.blockReason=blockReason;
+    rows.push(o);
+  });
+  // ما يحتاج قرارك أولًا، ثم الأطول انتظارًا
+  return rows.sort(function(a,b){
+    if(a.canApprove!==b.canApprove)return a.canApprove?-1:1;
+    return b.waitHours-a.waitHours;
+  }).slice(0,500);
 }
 
 function approveVisit(token,visitId,approved,comment){
