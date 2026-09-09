@@ -1,6 +1,6 @@
 /* =====================================================================
    Visits.gs — الزيارات، الاعتماد، GPS، الملاحظات، الخطط والمتابعة
-   V8.3.0 · شركة الدريس
+   V9.0.0 · شركة الدريس
    ===================================================================== */
 
 function getDashboard(token){
@@ -116,6 +116,7 @@ function saveVisit(token,payload){
   // الشهرية تُرحّل الزيارة الأسبوعية فقط إذا كانت مستحقة/متأخرة في نفس الدورة.
   satisfyLowerPriorityPlans_(session.computerNo,station.stationNo,visitType,visitDate,visitId,approver);
   if(typeof markVisitUnlockUsed_==='function')markVisitUnlockUsed_(session.computerNo,station.stationNo,visitType,visitId,visitDate);
+  completeVisitRequestsForVisit_(session.computerNo,station.stationNo,visitType,visitId);
   });
   if(approver)notify_(approver,'VISIT_PENDING_APPROVAL','زيارة جديدة بانتظار الاعتماد','المشرف '+session.name+' أرسل زيارة '+APP.VISIT_TYPES[visitType]+' للمحطة '+station.stationName+' #'+station.stationNo+'.',visitId,session.computerNo);
   audit_(session.computerNo,'VISIT_SUBMITTED',visitId,'station='+station.stationNo+' score='+score+' gps='+gpsStatus+' distance='+distance);
@@ -538,8 +539,19 @@ function getMyIssues(token,filters){const s=requireSession_(token);filters=filte
   // V8.1.4.7: صلاحية إدارة الملاحظات لا تعني تجاوز النطاق — لا تظهر إلا ملاحظات داخل نطاق المستخدم.
   if(!hasPermission_(s,'ISSUE_MANAGE'))return false;
   if(!issueAllowed_(s,x))return false;
-}if(filters.status&&String(x.STATUS||'')!==filters.status)return false;return true;}).sort(function(a,b){return String(a.DUE_DATE||'').localeCompare(String(b.DUE_DATE||''));}).map(issueObject_);}
-function issueObject_(x){const due=dateKeyFromValue_(x.DUE_DATE),today=dateKey_(new Date());return{issueId:String(x.ISSUE_ID||''),visitId:String(x.VISIT_ID||''),itemId:String(x.ITEM_ID||''),category:String(x.CATEGORY||''),itemText:String(x.ITEM_TEXT||''),stationNo:String(x.STATION_NO||''),stationName:String(x.STATION_NAME||''),region:String(x.REGION||''),createdAt:formatDateTimeSafe_(x.CREATED_AT),createdBy:String(x.CREATED_BY||''),ownerComputerNo:String(x.OWNER_COMPUTER_NO||''),status:String(x.STATUS||''),severity:String(x.SEVERITY||''),note:String(x.NOTE||''),photoUrl:String(x.PHOTO_URL||''),dueDate:due,ageDays:ageDays_(x.CREATED_AT),overdue:!!due&&due<today&&['CLOSED','CANCELED','AWAITING_VERIFICATION'].indexOf(String(x.STATUS||''))===-1,remediationSubmittedAt:formatDateTimeSafe_(x.REMEDIATION_SUBMITTED_AT),remediationNote:String(x.REMEDIATION_NOTE||''),remediationPhotoUrl:String(x.REMEDIATION_PHOTO_URL||''),returnReason:String(x.RETURN_REASON||'')};}
+}if(filters.status&&String(x.STATUS||'')!==filters.status)return false;return true;}).sort(issueSort_).map(issueObject_);}
+function issueObject_(x){const due=dateKeyFromValue_(x.DUE_DATE),today=dateKey_(new Date());return{issueId:String(x.ISSUE_ID||''),visitId:String(x.VISIT_ID||''),itemId:String(x.ITEM_ID||''),category:String(x.CATEGORY||''),itemText:String(x.ITEM_TEXT||''),stationNo:String(x.STATION_NO||''),stationName:String(x.STATION_NAME||''),region:String(x.REGION||''),createdAt:formatDateTimeSafe_(x.CREATED_AT),createdBy:String(x.CREATED_BY||''),ownerComputerNo:String(x.OWNER_COMPUTER_NO||''),status:String(x.STATUS||''),severity:String(x.SEVERITY||''),note:String(x.NOTE||''),photoUrl:String(x.PHOTO_URL||''),dueDate:due,ageDays:ageDays_(x.CREATED_AT),overdue:!!due&&due<today&&['CLOSED','CANCELED','AWAITING_VERIFICATION'].indexOf(String(x.STATUS||''))===-1,remediationSubmittedAt:formatDateTimeSafe_(x.REMEDIATION_SUBMITTED_AT),remediationNote:String(x.REMEDIATION_NOTE||''),remediationPhotoUrl:String(x.REMEDIATION_PHOTO_URL||''),returnReason:String(x.RETURN_REASON||''),
+  urgent:String(x.PRIORITY||'').toUpperCase()==='URGENT',priorityBy:String(x.PRIORITY_BY||''),
+  escalationLevel:Number(x.ESCALATION_LEVEL||0),escalatedTo:String(x.ESCALATED_TO||''),escalatedAt:formatDateTimeSafe_(x.ESCALATED_AT),
+  escalationLabel:({1:'مسؤول الإشراف',2:'مسؤول تشغيل المنطقة',3:'مدير العمليات'})[Number(x.ESCALATION_LEVEL||0)]||''};}
+/* V9: العاجل أولًا، ثم الأعلى تصعيدًا، ثم الأقرب مهلة. */
+function issueSort_(a,b){
+  const ua=String(a.PRIORITY||'').toUpperCase()==='URGENT'?1:0, ub=String(b.PRIORITY||'').toUpperCase()==='URGENT'?1:0;
+  if(ua!==ub)return ub-ua;
+  const ea=Number(a.ESCALATION_LEVEL||0), eb=Number(b.ESCALATION_LEVEL||0);
+  if(ea!==eb)return eb-ea;
+  return String(a.DUE_DATE||'9999').localeCompare(String(b.DUE_DATE||'9999'));
+}
 
 function getIssueContext(token,issueId){
   const s=requireSession_(token),ss=getDb_();
@@ -575,16 +587,14 @@ function saveIssueResolutionPhoto_(issueId,dataUrl,fileName){
   return folder.createFile(Utilities.newBlob(img.bytes,img.mime,evidenceFileName_(issueId+'-'+normalizeText_(fileName),issueId||'resolution',img.ext))).getUrl();
 }
 
-function verifyIssueResolution(token,issueId,approved,comment){const s=requireSession_(token);requirePermissionAny_(s,['ISSUE_CLOSE','VISIT_APPROVE']);const ish=getDb_().getSheetByName(APP.SHEETS.ISSUES),x=sheetObjects_(ish).filter(function(r){return String(r.ISSUE_ID||'')===String(issueId);})[0];if(!x)throw new Error('الملاحظة غير موجودة.');if(String(x.STATUS||'')!=='AWAITING_VERIFICATION')throw new Error('الملاحظة ليست بانتظار التحقق.');const v=findVisitObjectById_(String(x.VISIT_ID||''));if(s.roleId!=='SYSTEM_ADMIN'){
-  // V8.1.4.7: لو الزيارة محذوفة أو غير موجودة نتحقق من نطاق الملاحظة نفسها بدل تمرير العملية.
-  if(v){if(!canApproveVisit_(s,v))throw new Error('هذه الملاحظة ليست ضمن اعتماداتك.');}
-  else if(!issueAllowed_(s,x))throw new Error('هذه الملاحظة ليست ضمن نطاقك.');
-}comment=limitText_(normalizeText_(comment),1000);if(!approved&&!comment)throw new Error('اكتب سبب إعادة الملاحظة للمشرف.');const now=new Date();if(approved){updateRowsByKeys_(ish,{ISSUE_ID:issueId},{STATUS:'CLOSED',CLOSED_AT:now,CLOSED_BY:s.computerNo,VERIFIED_AT:now,VERIFIED_BY:s.computerNo,LAST_UPDATED_AT:now,RETURN_REASON:''});}else{updateRowsByKeys_(ish,{ISSUE_ID:issueId},{STATUS:'RETURNED',RETURN_REASON:comment,LAST_UPDATED_AT:now});notify_(String(x.OWNER_COMPUTER_NO||x.CREATED_BY||''),'ISSUE_RETURNED','الملاحظة تحتاج معالجة إضافية','الملاحظة '+issueId+' أُعيدت لك. السبب: '+comment,issueId,s.computerNo);}appendObject_(getDb_().getSheetByName(APP.SHEETS.ISSUE_UPDATES),{UPDATE_ID:'UPD-'+Utilities.getUuid(),ISSUE_ID:issueId,TIMESTAMP:now,COMPUTER_NO:s.computerNo,ACTION:approved?'VERIFIED_CLOSED':'VERIFICATION_RETURNED',COMMENT:comment,STATUS_FROM:'AWAITING_VERIFICATION',STATUS_TO:approved?'CLOSED':'RETURNED'});refreshVisitWorkflow_(String(x.VISIT_ID||''));return{ok:true,status:approved?'CLOSED':'RETURNED'};}
+function verifyIssueResolution(token,issueId,approved,comment){const s=requireSession_(token);requirePermissionAny_(s,['ISSUE_CLOSE','VISIT_APPROVE']);const ish=getDb_().getSheetByName(APP.SHEETS.ISSUES),x=sheetObjects_(ish).filter(function(r){return String(r.ISSUE_ID||'')===String(issueId);})[0];if(!x)throw new Error('الملاحظة غير موجودة.');if(String(x.STATUS||'')!=='AWAITING_VERIFICATION')throw new Error('الملاحظة ليست بانتظار التحقق.');// V9: يتحقق مساعد المشرف، أو من صُعِّدت إليه الملاحظة ومن فوقه بدور مكافئ.
+if(!canActOnIssue_(s,x))throw new Error('هذه الملاحظة ليست ضمن صلاحيتك للتحقق — يتحقق منها مساعد المشرف أو من صُعِّدت إليه.');
+comment=limitText_(normalizeText_(comment),1000);if(!approved&&!comment)throw new Error('اكتب سبب إعادة الملاحظة للمشرف.');const now=new Date();if(approved){updateRowsByKeys_(ish,{ISSUE_ID:issueId},{STATUS:'CLOSED',CLOSED_AT:now,CLOSED_BY:s.computerNo,VERIFIED_AT:now,VERIFIED_BY:s.computerNo,LAST_UPDATED_AT:now,RETURN_REASON:''});}else{updateRowsByKeys_(ish,{ISSUE_ID:issueId},{STATUS:'RETURNED',RETURN_REASON:comment,LAST_UPDATED_AT:now});notify_(String(x.OWNER_COMPUTER_NO||x.CREATED_BY||''),'ISSUE_RETURNED','الملاحظة تحتاج معالجة إضافية','الملاحظة '+issueId+' أُعيدت لك. السبب: '+comment,issueId,s.computerNo);}appendObject_(getDb_().getSheetByName(APP.SHEETS.ISSUE_UPDATES),{UPDATE_ID:'UPD-'+Utilities.getUuid(),ISSUE_ID:issueId,TIMESTAMP:now,COMPUTER_NO:s.computerNo,ACTION:approved?'VERIFIED_CLOSED':'VERIFICATION_RETURNED',COMMENT:comment,STATUS_FROM:'AWAITING_VERIFICATION',STATUS_TO:approved?'CLOSED':'RETURNED'});refreshVisitWorkflow_(String(x.VISIT_ID||''));return{ok:true,status:approved?'CLOSED':'RETURNED'};}
 
 function refreshVisitWorkflow_(visitId){const issues=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.ISSUES)).filter(function(x){return String(x.VISIT_ID||'')===String(visitId)&&String(x.STATUS||'')!=='CANCELED';});let status='CLOSED';if(issues.some(function(x){return String(x.STATUS||'')==='AWAITING_VERIFICATION';}))status='AWAITING_VERIFICATION';else if(issues.some(function(x){return String(x.STATUS||'')!=='CLOSED';}))status='FOLLOW_UP';updateRowsByKeys_(getDb_().getSheetByName(APP.SHEETS.VISITS),{VISIT_ID:visitId},{WORKFLOW_STATUS:status});if(status==='CLOSED'){const v=findVisitObjectById_(visitId);if(v)notify_(String(v.COMPUTER_NO||''),'VISIT_CLOSED','تم إغلاق الزيارة','تم إغلاق جميع ملاحظات الزيارة '+visitId+'.',visitId,'SYSTEM');}}
 
 const ISSUE_STATUSES_=Object.freeze(['PENDING_APPROVAL','OPEN','IN_PROGRESS','OVERDUE','AWAITING_VERIFICATION','RETURNED','RESOLVED','CLOSED','CANCELED']);
-function adminListIssues(token,filters){const s=requireSession_(token);filters=filters||{};requirePermissionAny_(s,['ISSUE_VIEW_ALL','ISSUE_VIEW_SCOPE','ISSUE_MANAGE','ISSUE_CLOSE']);return sheetObjects_(getDb_().getSheetByName(APP.SHEETS.ISSUES)).filter(function(x){if(!issueAllowed_(s,x))return false;if(filters.status&&String(x.STATUS||'')!==filters.status)return false;if(filters.stationNo&&String(x.STATION_NO||'')!==filters.stationNo)return false;if(filters.supervisor&&String(x.CREATED_BY||'')!==filters.supervisor)return false;return true;}).sort(function(a,b){return sortKeyFromValue_(b.CREATED_AT).localeCompare(sortKeyFromValue_(a.CREATED_AT));}).slice(0,500).map(issueObject_);}
+function adminListIssues(token,filters){const s=requireSession_(token);filters=filters||{};requirePermissionAny_(s,['ISSUE_VIEW_ALL','ISSUE_VIEW_SCOPE','ISSUE_MANAGE','ISSUE_CLOSE']);return sheetObjects_(getDb_().getSheetByName(APP.SHEETS.ISSUES)).filter(function(x){if(!issueAllowed_(s,x))return false;if(filters.status&&String(x.STATUS||'')!==filters.status)return false;if(filters.stationNo&&String(x.STATION_NO||'')!==filters.stationNo)return false;if(filters.supervisor&&String(x.CREATED_BY||'')!==filters.supervisor)return false;return true;}).sort(function(a,b){const p=issueSort_(a,b);if(p!==0&&(String(a.PRIORITY||'')!==String(b.PRIORITY||'')||Number(a.ESCALATION_LEVEL||0)!==Number(b.ESCALATION_LEVEL||0)))return p;return sortKeyFromValue_(b.CREATED_AT).localeCompare(sortKeyFromValue_(a.CREATED_AT));}).slice(0,500).map(issueObject_);}
 function adminUpdateIssue(token,issueId,payload){const s=requireSession_(token);requirePermission_(s,'ISSUE_MANAGE');payload=payload||{};const ish=getDb_().getSheetByName(APP.SHEETS.ISSUES),x=sheetObjects_(ish).filter(function(r){return String(r.ISSUE_ID||'')===String(issueId);})[0];if(!x)throw new Error('الملاحظة غير موجودة.');if(!issueAllowed_(s,x))throw new Error('الملاحظة خارج نطاقك.');const st=normalizeText_(payload.status||x.STATUS).toUpperCase(),owner=limitText_(normalizeText_(payload.ownerComputerNo||x.OWNER_COMPUTER_NO),32),comment=limitText_(normalizeText_(payload.comment),1000);
 // V8.1.4.7: لا تُكتب حالة خارج دورة حياة الملاحظة، ولا يُسند العمل لمستخدم غير موجود أو موقوف.
 if(ISSUE_STATUSES_.indexOf(st)===-1)throw new Error('حالة الملاحظة غير معروفة.');
@@ -675,6 +685,174 @@ function adminListVisitUnlocks(token,computerNo){
       revokedAt:formatDateTimeSafe_(u.REVOKED_AT),revokedBy:String(u.REVOKED_BY||'')
     };
   });
+}
+
+/* =====================================================================
+   V9 — نقل الأولوية · سجل ملاحظات المحطة بتاريخ الزيارة · طلبات الزيارة · فريقي
+   ===================================================================== */
+const PRIORITY_ROLES_=Object.freeze(['SUPERVISION_MANAGER','REGION_MANAGER','OPERATIONS_DEPUTY','OPERATIONS_MANAGER','SYSTEM_ADMIN']);
+
+/* «نقل الأولوية» = علامة عاجل تقدّم الملاحظة في ترتيب المعالجة دون تغيير خطورتها. */
+function setIssuePriority(token,issueId,urgent){
+  const s=requireSession_(token);
+  if(PRIORITY_ROLES_.indexOf(s.roleId)===-1)throw new Error('نقل الأولوية لمسؤول الإشراف ومسؤول التشغيل ومدير العمليات.');
+  issueId=limitText_(normalizeText_(issueId),80);
+  const ish=getDb_().getSheetByName(APP.SHEETS.ISSUES), x=sheetObjects_(ish).filter(function(r){return String(r.ISSUE_ID||'')===issueId;})[0];
+  if(!x)throw new Error('الملاحظة غير موجودة.');
+  if(!issueAllowed_(s,x))throw new Error('الملاحظة خارج فريقك.');
+  if(['CLOSED','CANCELED'].indexOf(String(x.STATUS||''))!==-1)throw new Error('الملاحظة مغلقة.');
+  const now=new Date(), on=!!urgent;
+  updateRowsByKeys_(ish,{ISSUE_ID:issueId},{PRIORITY:on?'URGENT':'',PRIORITY_BY:on?s.computerNo:'',PRIORITY_AT:on?now:'',LAST_UPDATED_AT:now});
+  appendObject_(getDb_().getSheetByName(APP.SHEETS.ISSUE_UPDATES),{UPDATE_ID:'UPD-'+Utilities.getUuid(),ISSUE_ID:issueId,TIMESTAMP:now,COMPUTER_NO:s.computerNo,ACTION:on?'PRIORITY_URGENT':'PRIORITY_CLEARED',COMMENT:on?'قُدِّمت في ترتيب المعالجة':'أُزيلت علامة العاجل',STATUS_FROM:String(x.STATUS||''),STATUS_TO:String(x.STATUS||'')});
+  if(on){
+    const owner=String(x.OWNER_COMPUTER_NO||x.CREATED_BY||'');
+    notify_(owner,'ISSUE_URGENT','ملاحظة عاجلة','قُدِّمت الملاحظة «'+String(x.ITEM_TEXT||'')+'» في '+String(x.STATION_NAME||x.STATION_NO||'')+' إلى أعلى قائمة معالجتك بقرار '+s.name+'.',issueId,s.computerNo);
+    const asst=assistantOf_(owner);if(asst)notify_(asst,'ISSUE_URGENT','ملاحظة عاجلة لدى مشرفك','الملاحظة «'+String(x.ITEM_TEXT||'')+'» لدى '+owner+' صارت عاجلة.',issueId,s.computerNo);
+  }
+  audit_(s.computerNo,on?'ISSUE_PRIORITY_URGENT':'ISSUE_PRIORITY_CLEARED',issueId,'');
+  return {ok:true,urgent:on};
+}
+
+/* سجل المحطة: كل زيارة وتحتها ملاحظاتها — بتاريخ الزيارة. */
+function getStationIssueLog(token,stationNo){
+  const s=requireSession_(token);
+  stationNo=limitText_(normalizeText_(stationNo),40);
+  const station=findStation_(stationNo); if(!station)throw new Error('المحطة غير موجودة.');
+  if(!stationAllowed_(session_(s),station))throw new Error('المحطة خارج نطاقك.');
+  const ss=getDb_();
+  const visits=sheetObjects_(ss.getSheetByName(APP.SHEETS.VISITS)).filter(function(v){
+    if(String(v.STATION_NO||'')!==stationNo)return false;
+    if(s.roleId==='SUPERVISOR')return String(v.COMPUTER_NO||'')===s.computerNo;
+    return visitAllowed_(s,v);
+  }).sort(function(a,b){return sortKeyFromValue_(b.COMPLETED_AT).localeCompare(sortKeyFromValue_(a.COMPLETED_AT));}).slice(0,60);
+  const byVisit={};
+  sheetObjects_(ss.getSheetByName(APP.SHEETS.ISSUES)).forEach(function(x){
+    if(String(x.STATION_NO||'')!==stationNo)return;
+    (byVisit[String(x.VISIT_ID||'')]||(byVisit[String(x.VISIT_ID||'')]=[])).push(x);
+  });
+  let openTotal=0,overdueTotal=0;
+  const log=visits.map(function(v){
+    const list=(byVisit[String(v.VISIT_ID||'')]||[]).sort(issueSort_).map(issueObject_);
+    list.forEach(function(i){if(['CLOSED','CANCELED'].indexOf(i.status)===-1)openTotal++;if(i.overdue)overdueTotal++;});
+    const o=visitListObjectForSession_(v,s);o.issues=list;o.openCount=list.filter(function(i){return ['CLOSED','CANCELED'].indexOf(i.status)===-1;}).length;return o;
+  });
+  return {station:station,visits:log,openTotal:openTotal,overdueTotal:overdueTotal};
+}
+function session_(s){return s;}
+
+/* ---------- طلبات الزيارة: مدير العمليات → مساعد الإشراف → المشرف ---------- */
+const VISIT_REQUEST_ROLES_=Object.freeze(['OPERATIONS_MANAGER','OPERATIONS_DEPUTY','SYSTEM_ADMIN']);
+function requestsSheet_(){const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_REQUESTS);if(!sh)throw new Error('شيت VISIT_REQUESTS غير موجود. شغّل upgradeSystemV4() من المحرر أولًا.');return sh;}
+function supervisorForStation_(stationNo){
+  const users=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS));
+  for(let i=0;i<users.length;i++){
+    if(!toBool_(users[i].ACTIVE))continue;
+    if(normalizeRoleId_(users[i].ROLE_ID||users[i].ROLE||'')!=='SUPERVISOR')continue;
+    if(csvArray_(users[i].STATION_NOS).indexOf(String(stationNo))!==-1)return String(users[i].COMPUTER_NO||'');
+  }
+  return '';
+}
+function requestObject_(r){
+  const st=findStation_(String(r.STATION_NO||''))||{};
+  const sup=findUserByComputerNo_(String(r.SUPERVISOR_COMPUTER_NO||''))||{}, asst=findUserByComputerNo_(String(r.ASSISTANT_COMPUTER_NO||''))||{}, by=findUserByComputerNo_(String(r.REQUESTED_BY||''))||{};
+  return{requestId:String(r.REQUEST_ID||''),stationNo:String(r.STATION_NO||''),stationName:String(r.STATION_NAME||st.stationName||''),region:st.region||'',
+    visitType:String(r.VISIT_TYPE||'DAILY'),visitTypeLabel:APP.VISIT_TYPES[String(r.VISIT_TYPE||'DAILY')]||String(r.VISIT_TYPE||''),note:String(r.NOTE||''),
+    dueDate:dateKeyFromValue_(r.DUE_DATE),status:String(r.STATUS||'OPEN'),requestedBy:String(r.REQUESTED_BY||''),requestedByName:String(by.NAME||r.REQUESTED_BY||''),requestedAt:formatDateTimeSafe_(r.REQUESTED_AT),
+    supervisorComputerNo:String(r.SUPERVISOR_COMPUTER_NO||''),supervisorName:String(sup.NAME||''),assistantComputerNo:String(r.ASSISTANT_COMPUTER_NO||''),assistantName:String(asst.NAME||''),
+    doneVisitId:String(r.DONE_VISIT_ID||''),doneAt:formatDateTimeSafe_(r.DONE_AT),
+    overdue:!!dateKeyFromValue_(r.DUE_DATE)&&dateKeyFromValue_(r.DUE_DATE)<dateKey_(new Date())&&String(r.STATUS||'')==='OPEN'};
+}
+function createVisitRequest(token,payload){
+  const s=requireSession_(token);payload=payload||{};
+  if(VISIT_REQUEST_ROLES_.indexOf(s.roleId)===-1)throw new Error('طلب الزيارة من صلاحية مدير العمليات.');
+  const stationNo=limitText_(normalizeText_(payload.stationNo),40), typ=normalizeText_(payload.visitType||'DAILY').toUpperCase();
+  if(!APP.VISIT_TYPES[typ])throw new Error('نوع الزيارة غير صحيح.');
+  const station=findStation_(stationNo);if(!station||!station.active)throw new Error('المحطة غير موجودة أو غير فعالة.');
+  let sup=limitText_(normalizeText_(payload.supervisorComputerNo),32)||supervisorForStation_(stationNo);
+  if(!sup)throw new Error('لا يوجد مشرف مسندة إليه هذه المحطة. أسند المحطة لمشرف أولًا.');
+  const su=findUserByComputerNo_(sup);if(!su||!toBool_(su.ACTIVE))throw new Error('المشرف غير موجود أو غير فعال.');
+  const asst=assistantOf_(sup);
+  const due=normalizeText_(payload.dueDate)||dateAddDaysKey_(dateKey_(new Date()),Math.max(1,Number(settingValue_('VISIT_REQUEST_DAYS','3'))||3));
+  const id='REQ-'+Utilities.formatDate(new Date(),APP.TZ,'yyyyMMdd')+'-'+Utilities.getUuid().slice(0,6), now=new Date();
+  appendObject_(requestsSheet_(),{REQUEST_ID:id,STATION_NO:stationNo,STATION_NAME:station.stationName,VISIT_TYPE:typ,NOTE:limitText_(normalizeText_(payload.note),1000),DUE_DATE:due,STATUS:'OPEN',
+    REQUESTED_BY:s.computerNo,REQUESTED_AT:now,SUPERVISOR_COMPUTER_NO:sup,ASSISTANT_COMPUTER_NO:asst,ASSIGNED_AT:now,ASSIGNED_BY:s.computerNo,UPDATED_AT:now});
+  const body='طلب '+s.name+' زيارة '+(APP.VISIT_TYPES[typ]||typ)+' للمحطة '+station.stationName+' #'+stationNo+' قبل '+due+(payload.note?(' — '+limitText_(normalizeText_(payload.note),200)):'')+'.';
+  notify_(sup,'VISIT_REQUESTED','زيارة مطلوبة منك',body,id,s.computerNo);
+  if(asst)notify_(asst,'VISIT_REQUESTED','زيارة مطلوبة من مشرفك '+String(su.NAME||sup),body,id,s.computerNo);
+  audit_(s.computerNo,'VISIT_REQUEST_CREATED',id,stationNo+' '+typ+' sup='+sup);
+  return {ok:true,requestId:id,supervisorComputerNo:sup,assistantComputerNo:asst,dueDate:due};
+}
+function listVisitRequests(token,filters){
+  const s=requireSession_(token);filters=filters||{};
+  const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_REQUESTS);if(!sh)return [];
+  return sheetObjects_(sh).filter(function(r){
+    if(filters.status&&String(r.STATUS||'')!==filters.status)return false;
+    if(filters.stationNo&&String(r.STATION_NO||'')!==String(filters.stationNo))return false;
+    const sup=String(r.SUPERVISOR_COMPUTER_NO||'');
+    if(s.roleId==='SUPERVISOR')return sup===s.computerNo;
+    if(seesAll_(s))return true;
+    if(String(r.ASSISTANT_COMPUTER_NO||'')===s.computerNo)return true;
+    return inTeam_(s,sup);
+  }).sort(function(a,b){const oa=String(a.STATUS||'')==='OPEN'?0:1,ob=String(b.STATUS||'')==='OPEN'?0:1;if(oa!==ob)return oa-ob;return String(a.DUE_DATE||'9999').localeCompare(String(b.DUE_DATE||'9999'));}).slice(0,300).map(requestObject_);
+}
+function openVisitRequestsFor_(supervisorNo,stationNo){
+  const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_REQUESTS);if(!sh)return [];
+  return sheetObjects_(sh).filter(function(r){return String(r.STATUS||'')==='OPEN'&&String(r.SUPERVISOR_COMPUTER_NO||'')===String(supervisorNo)&&String(r.STATION_NO||'')===String(stationNo);}).map(requestObject_);
+}
+function reassignVisitRequest(token,requestId,supervisorComputerNo){
+  const s=requireSession_(token);requestId=limitText_(normalizeText_(requestId),80);supervisorComputerNo=limitText_(normalizeText_(supervisorComputerNo),32);
+  const sh=requestsSheet_(), r=sheetObjects_(sh).filter(function(x){return String(x.REQUEST_ID||'')===requestId;})[0];
+  if(!r)throw new Error('الطلب غير موجود.');
+  if(String(r.STATUS||'')!=='OPEN')throw new Error('الطلب ليس مفتوحًا.');
+  const isAsst=String(r.ASSISTANT_COMPUTER_NO||'')===s.computerNo;
+  if(!isAsst&&VISIT_REQUEST_ROLES_.indexOf(s.roleId)===-1&&!(usesTeamScope_(s)&&inTeam_(s,r.SUPERVISOR_COMPUTER_NO)))throw new Error('إعادة توجيه الطلب لمساعد الإشراف المسؤول أو مدير العمليات.');
+  const su=findUserByComputerNo_(supervisorComputerNo);if(!su||!toBool_(su.ACTIVE)||normalizeRoleId_(su.ROLE_ID||su.ROLE||'')!=='SUPERVISOR')throw new Error('المشرف الجديد غير موجود أو ليس مشرفًا.');
+  if(csvArray_(su.STATION_NOS).indexOf(String(r.STATION_NO||''))===-1)throw new Error('المحطة ليست مسندة إلى هذا المشرف.');
+  const asst=assistantOf_(supervisorComputerNo), now=new Date();
+  updateRowsByKeys_(sh,{REQUEST_ID:requestId},{SUPERVISOR_COMPUTER_NO:supervisorComputerNo,ASSISTANT_COMPUTER_NO:asst,ASSIGNED_AT:now,ASSIGNED_BY:s.computerNo,UPDATED_AT:now});
+  notify_(supervisorComputerNo,'VISIT_REQUESTED','زيارة مطلوبة منك','أُعيد توجيه طلب زيارة '+String(r.STATION_NAME||r.STATION_NO||'')+' إليك قبل '+dateKeyFromValue_(r.DUE_DATE)+'.',requestId,s.computerNo);
+  audit_(s.computerNo,'VISIT_REQUEST_REASSIGNED',requestId,'to='+supervisorComputerNo);
+  return {ok:true};
+}
+function cancelVisitRequest(token,requestId,reason){
+  const s=requireSession_(token);requestId=limitText_(normalizeText_(requestId),80);
+  const sh=requestsSheet_(), r=sheetObjects_(sh).filter(function(x){return String(x.REQUEST_ID||'')===requestId;})[0];
+  if(!r)throw new Error('الطلب غير موجود.');
+  if(String(r.REQUESTED_BY||'')!==s.computerNo&&VISIT_REQUEST_ROLES_.indexOf(s.roleId)===-1)throw new Error('يلغي الطلب من أنشأه أو مدير العمليات.');
+  if(String(r.STATUS||'')!=='OPEN')return {ok:true,already:true};
+  const now=new Date();
+  updateRowsByKeys_(sh,{REQUEST_ID:requestId},{STATUS:'CANCELED',CANCELED_AT:now,CANCELED_BY:s.computerNo,UPDATED_AT:now,NOTE:String(r.NOTE||'')+(reason?(' — إلغاء: '+limitText_(normalizeText_(reason),300)):'')});
+  audit_(s.computerNo,'VISIT_REQUEST_CANCELED',requestId,'');
+  return {ok:true};
+}
+/* عند حفظ زيارة: أي طلب مفتوح لنفس المشرف والمحطة (ونفس النوع أو أي نوع إن كان الطلب يوميًا) يُغلق. */
+function completeVisitRequestsForVisit_(supervisorNo,stationNo,visitType,visitId){
+  try{
+    const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_REQUESTS);if(!sh)return 0;
+    const now=new Date();let count=0;
+    sheetObjects_(sh).forEach(function(r){
+      if(String(r.STATUS||'')!=='OPEN')return;
+      if(String(r.SUPERVISOR_COMPUTER_NO||'')!==String(supervisorNo)||String(r.STATION_NO||'')!==String(stationNo))return;
+      const rt=String(r.VISIT_TYPE||'DAILY');
+      if(rt!==String(visitType)&&!(rt==='DAILY'))return;
+      updateRowsByKeys_(sh,{REQUEST_ID:String(r.REQUEST_ID||'')},{STATUS:'DONE',DONE_VISIT_ID:String(visitId||''),DONE_AT:now,UPDATED_AT:now});
+      const by=String(r.REQUESTED_BY||'');if(by)notify_(by,'VISIT_REQUEST_DONE','نُفِّذت الزيارة المطلوبة','الزيارة المطلوبة للمحطة '+String(r.STATION_NAME||r.STATION_NO||'')+' نُفِّذت ('+String(visitId||'')+').',String(r.REQUEST_ID||''),'SYSTEM');
+      count++;
+    });
+    return count;
+  }catch(e){return 0;}
+}
+
+/* فريقي: من تحتي مباشرة ومن تحتهم — لعرض الشجرة وطيّها في الواجهة. */
+function getMyTeam(token){
+  const s=requireSession_(token);
+  const users=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(u){return toBool_(u.ACTIVE);});
+  const allowed=function(no){return seesAll_(s)||inTeam_(s,no);};
+  const nodes=users.filter(function(u){return allowed(String(u.COMPUTER_NO||''));}).map(function(u){
+    const rid=normalizeRoleId_(u.ROLE_ID||u.ROLE||'');
+    return{computerNo:String(u.COMPUTER_NO||''),name:String(u.NAME||''),roleId:rid,roleName:getRoleName_(rid),parent:parentOfUser_(u),stationCount:rid==='SUPERVISOR'?csvArray_(u.STATION_NOS).length:0,rank:ROLE_RANK_[rid]!==undefined?ROLE_RANK_[rid]:5};
+  });
+  return {me:{computerNo:s.computerNo,name:s.name,roleId:s.roleId},nodes:nodes};
 }
 
 function getMySchedule(token){const s=requireSession_(token),today=dateKey_(new Date());const plans=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS)).filter(function(p){return toBool_(p.ACTIVE)&&String(p.COMPUTER_NO||'')===s.computerNo;});return plans.map(function(p){const due=dateKeyFromValue_(p.NEXT_DUE_DATE)||dateKeyFromValue_(p.START_DATE),station=findStation_(p.STATION_NO)||{stationName:'محطة '+p.STATION_NO};let status='UPCOMING',days=0;if(due){const dd=parseDateKey_(due),tt=parseDateKey_(today);days=Math.round((dd-tt)/86400000);if(days<0)status='OVERDUE';else if(days===0)status='DUE_TODAY';else if(days<=3)status='DUE_SOON';}return{planId:String(p.PLAN_ID||''),stationNo:String(p.STATION_NO||''),stationName:station.stationName,visitType:String(p.VISIT_TYPE||''),startDate:dateKeyFromValue_(p.START_DATE),anchorDate:dateKeyFromValue_(p.ANCHOR_DATE),lastVisitDate:dateKeyFromValue_(p.LAST_VISIT_DATE),nextDueDate:due,status:status,daysToDue:days};}).sort(function(a,b){return String(a.nextDueDate||'9999').localeCompare(String(b.nextDueDate||'9999'));});}

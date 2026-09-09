@@ -1,6 +1,6 @@
 /* =====================================================================
    Workflow.gs — دورة الاعتماد، الجداول الزمنية، التنبيهات والتصعيد
-   V8.1 · شركة الدريس
+   V9.0.0 · شركة الدريس
    ===================================================================== */
 
 function settingValue_(key, fallback) {
@@ -26,7 +26,10 @@ function resolveApproverForSupervisor_(computerNo, station) {
   const users = sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(x){return toBool_(x.ACTIVE)&&String(x.COMPUTER_NO||'')!==self;});
   const region = station ? String(station.region||station.REGION||'') : '';
   const branch = station ? String(station.branch||station.BRANCH||'') : '';
-  const preferred = ['APPROVAL_ASSISTANT','REGION_MANAGER','SUPERVISION_MANAGER','OPERATIONS_DEPUTY','OPERATIONS_MANAGER','SYSTEM_ADMIN'];
+  // V9: المعتمِد مساعد إشراف — أقرب مساعد في السلسلة فوق المشرف، ثم أي مساعد في نطاق المحطة.
+  const chainAsst = nearestAboveWithRole_(self,['APPROVAL_ASSISTANT']);
+  if (chainAsst && chainAsst !== self) return chainAsst;
+  const preferred = ['APPROVAL_ASSISTANT','SYSTEM_ADMIN'];
   for (let p=0;p<preferred.length;p++) {
     for (let i=0;i<users.length;i++) {
       const role=normalizeRoleId_(users[i].ROLE_ID||users[i].ROLE||'');
@@ -49,23 +52,43 @@ function managerForUser_(computerNo) {
   return u ? String(u.MANAGER_COMPUTER_NO||'') : '';
 }
 
+/* V9: الاعتماد لمساعد الإشراف وحده.
+   - منفّذ الزيارة لا يعتمد زيارته.
+   - المُسنَد إليه صراحةً (إسناد صحيح) يعتمد.
+   - مساعد المشرف (APPROVER_COMPUTER_NO في سجل المشرف) يعتمد.
+   - مسؤول الإشراف ومسؤول التشغيل ومدير العمليات لا يعتمدون — دورهم الاطلاع والتصعيد وإعادة الإسناد.
+   - مدير النظام يحتفظ بالتجاوز التقني. */
 function canApproveVisit_(session, visit) {
   if(!session || !visit) return false;
-  if(session.computerNo===String(visit.COMPUTER_NO||'')) return false;
+  const author=String(visit.COMPUTER_NO||'');
+  if(session.computerNo===author) return false;
   if(session.roleId==='SYSTEM_ADMIN') return true;
+  if(['OPERATIONS_MANAGER','OPERATIONS_DEPUTY','REGION_MANAGER','SUPERVISION_MANAGER'].indexOf(session.roleId)!==-1) return false;
   if(!hasPermission_(session,'VISIT_APPROVE')) return false;
   const assigned=String(visit.APPROVER_COMPUTER_NO||'');
-  /* V8.2.1: إسناد الزيارة إلى منفّذها نفسه إسناد فاسد — نتجاهله ونمرّ لقاعدة النطاق
-     حتى لا تبقى الزيارة عالقة بلا أحد يستطيع اعتمادها. */
-  const selfAssigned=!!assigned&&assigned===String(visit.COMPUTER_NO||'');
-  if(assigned&&!selfAssigned){
-    if(assigned===session.computerNo) return true;
-    if(hasPermission_(session,'VISIT_VIEW_ALL')) return true;
-    if(managerForUser_(assigned)===session.computerNo) return true;
-    return false;
-  }
-  if(hasPermission_(session,'VISIT_VIEW_ALL')) return true;
-  return visitAllowed_(session,visit);
+  const selfAssigned=!!assigned&&assigned===author;
+  if(assigned&&!selfAssigned) return assigned===session.computerNo;
+  // V9: مساعد المشرف وحده يعتمد. ولو لم يُحدَّد للمشرف مساعد بعد (بيانات قديمة)،
+  // لا تبقى الزيارة معلّقة: أي مساعد إشراف نطاقه يشمل الزيارة يستطيع اعتمادها.
+  const asst=assistantOf_(author);
+  if(asst) return asst===session.computerNo;
+  return session.roleId==='APPROVAL_ASSISTANT'&&visitAllowed_(session,visit);
+}
+
+/* من يستطيع التصرّف في ملاحظة (التحقق/الإغلاق/الإعادة):
+   مساعد المشرف دائمًا، ومن صُعِّدت إليه، ومن فوقه في السلسلة بدور يكافئ مستواها أو أعلى. */
+function canActOnIssue_(session, issue){
+  if(!session||!issue)return false;
+  if(session.roleId==='SYSTEM_ADMIN')return true;
+  const owner=String(issue.OWNER_COMPUTER_NO||issue.CREATED_BY||'');
+  if(owner===session.computerNo)return false;
+  if(assistantOf_(owner)===session.computerNo)return true;
+  const level=Number(issue.ESCALATION_LEVEL||0);
+  if(level<1)return false;
+  if(String(issue.ESCALATED_TO||'')===session.computerNo)return true;
+  const need={1:['SUPERVISION_MANAGER','REGION_MANAGER','OPERATIONS_DEPUTY','OPERATIONS_MANAGER'],2:['REGION_MANAGER','OPERATIONS_DEPUTY','OPERATIONS_MANAGER'],3:['OPERATIONS_DEPUTY','OPERATIONS_MANAGER']}[Math.min(3,level)];
+  if(need.indexOf(session.roleId)===-1)return false;
+  return seesAll_(session)||inTeam_(session,owner);
 }
 
 function dateAddDaysKey_(key, days) {
@@ -229,11 +252,13 @@ function visitCycleInfo_(visitType, anchor, today){
 function typeDoneInCycle_(computerNo, stationNo, visitType, cycle, visitRows){
   if(!cycle||!cycle.start)return null;
   const rows=visitRows||sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISITS));
+  // V9: الشهرية المنجَزة داخل دورة الأسبوعية تُغلق تلك الدورة أيضًا.
+  const accepts=visitType==='BIWEEKLY'?['BIWEEKLY','MONTHLY']:[String(visitType)];
   for(let i=0;i<rows.length;i++){
     const v=rows[i];
     if(String(v.COMPUTER_NO||'')!==String(computerNo))continue;
     if(String(v.STATION_NO||'')!==String(stationNo))continue;
-    if(String(v.VISIT_TYPE||'')!==String(visitType))continue;
+    if(accepts.indexOf(String(v.VISIT_TYPE||''))===-1)continue;
     if(String(v.APPROVAL_STATUS||'')==='REJECTED')continue;
     const d=dateKeyFromValue_(v.DATE);
     if(d&&d>=cycle.start&&d<=cycle.end)return v;
@@ -284,40 +309,51 @@ function visitTypeStateFor_(computerNo, stationNo, visitType, anchor, today, vis
   };
 }
 
+/* V9 — قفل الأولوية (قرار ٢٠٢٦-٠٩-٠٩ الثاني، يلغي إلغاء القفل في V8.2.0):
+   اليومية هي الأصل. إذا استحقت الشهرية فهي الوحيدة المسموحة حتى تُنجَز، وإلا إذا استحقت
+   الأسبوعية فهي الوحيدة، وإلا اليومية وحدها. بعد إنجاز الدورية تُفتح اليومية فورًا.
+   إنجاز الشهرية يُغلق دورة الأسبوعية الجارية أيضًا. الفتح الإداري يُستحِق النوع مبكرًا. */
 function visitGateForRows_(computerNo, stationNo, visitRows, unlockRows){
   const today=dateKey_(new Date());
   const anchor=visitAnchorDate_(computerNo,stationNo,visitRows);
   const weekly=visitTypeStateFor_(computerNo,stationNo,'BIWEEKLY',anchor,today,visitRows,unlockRows);
   const monthly=visitTypeStateFor_(computerNo,stationNo,'MONTHLY',anchor,today,visitRows,unlockRows);
 
-  const allowed=['DAILY'];
-  if(weekly.open)allowed.push('BIWEEKLY');
-  if(monthly.open)allowed.push('MONTHLY');
+  let required='';
+  if(monthly.open)required='MONTHLY';
+  else if(weekly.open)required='BIWEEKLY';
+  const allowed=required?[required]:['DAILY'];
+  const label=required?(APP.VISIT_TYPES[required]||required):'';
+  const reqState=required==='MONTHLY'?monthly:(required==='BIWEEKLY'?weekly:null);
+  const message=required
+    ? ('حان وقت الزيارة '+label+' لهذه المحطة. أكملها أولًا وستُفتح اليومية تلقائيًا بعد إرسالها.'+(reqState&&reqState.unlocked?' (فُتحت بقرار إداري)':''))
+    : 'الزيارة اليومية متاحة. لا توجد زيارة دورية مستحقة الآن.';
 
-  // اقتراح غير ملزم: الأعلى دورة أولًا. اليومية تبقى مفتوحة في كل الأحوال.
-  const suggested=monthly.open?'MONTHLY':(weekly.open?'BIWEEKLY':'');
-  const suggestedLabel=suggested?(APP.VISIT_TYPES[suggested]||suggested):'';
-  const suggestion=suggested
-    ? ('الزيارة '+suggestedLabel+' متاحة الآن لهذه المحطة. اليومية متاحة أيضًا — الاختيار لك.')
-    : 'الزيارة اليومية متاحة. لا توجد زيارة دورية مفتوحة لهذه المحطة حاليًا.';
+  // أسباب إغلاق ما ليس مسموحًا الآن
+  if(required){
+    if(required==='MONTHLY'){weekly.blockedReason='الشهرية مستحقة الآن وتغطي الأسبوعية — أكمل الشهرية أولًا.';}
+    if(!allowed.length||allowed.indexOf('DAILY')===-1){}
+  }
+  const dailyBlocked=required?('اليومية مقفلة حتى إكمال الزيارة '+label+' المستحقة.'):'';
+  if(!required){
+    if(!weekly.blockedReason)weekly.blockedReason='الأسبوعية غير مستحقة الآن'+(weekly.opensOn?(' — تُستحق في '+weekly.opensOn):'')+'.';
+    if(!monthly.blockedReason)monthly.blockedReason='الشهرية غير مستحقة الآن'+(monthly.opensOn?(' — تُستحق في '+monthly.opensOn):'')+'.';
+  }
 
   return {
     anchorDate:anchor,
     allowedVisitTypes:allowed,
-    suggestedVisitType:suggested,
-    suggestedVisitLabel:suggestedLabel,
-    suggestion:suggestion,
-    weekly:weekly,
-    monthly:monthly,
-    states:{BIWEEKLY:weekly,MONTHLY:monthly},
-    /* حقول متوافقة مع الإصدارات السابقة — لم يعد النظام يفرض نوعًا ولا يقفل اليومية */
-    requiredVisitType:'',
-    requiredVisitLabel:'',
-    forced:false,
-    dailyAllowed:true,
-    dueDate:suggested?(suggested==='MONTHLY'?monthly.cycleEnd:weekly.cycleEnd):'',
-    reason:'',
-    message:suggestion
+    requiredVisitType:required,
+    requiredVisitLabel:label,
+    forced:!!required,
+    dailyAllowed:!required,
+    dailyBlockedReason:dailyBlocked,
+    dueDate:reqState?reqState.cycleEnd:'',
+    reason:required?(reqState&&reqState.unlocked?'UNLOCKED':'DUE'):'',
+    message:message,
+    /* حقول V8.2 المتوافقة */
+    suggestedVisitType:required,suggestedVisitLabel:label,suggestion:message,
+    weekly:weekly,monthly:monthly,states:{DAILY:{visitType:'DAILY',label:APP.VISIT_TYPES.DAILY,open:!required,blockedReason:dailyBlocked},BIWEEKLY:weekly,MONTHLY:monthly}
   };
 }
 
@@ -336,7 +372,10 @@ function getVisitGate(token, stationNo) {
   const station=findStation_(stationNo);
   if(!station||!station.active)throw new Error('المحطة غير موجودة أو غير فعالة.');
   if(!stationAllowed_(session,station))throw new Error('المحطة خارج نطاقك.');
-  return visitGateFor_(session.computerNo,station.stationNo);
+  const gate=visitGateFor_(session.computerNo,station.stationNo);
+  // V9: طلبات الزيارة المفتوحة لهذه المحطة لهذا المشرف
+  gate.requests=(typeof openVisitRequestsFor_==='function')?openVisitRequestsFor_(session.computerNo,station.stationNo):[];
+  return gate;
 }
 
 function assertVisitTypeAllowed_(session, stationNo, visitType) {
@@ -344,7 +383,7 @@ function assertVisitTypeAllowed_(session, stationNo, visitType) {
   const gate=visitGateFor_(session.computerNo,stationNo);
   if(gate.allowedVisitTypes.indexOf(visitType)!==-1)return gate;
   const state=gate.states[visitType];
-  throw new Error(state&&state.blockedReason?state.blockedReason:'هذا النوع من الزيارات غير متاح لهذه المحطة الآن.');
+  throw new Error(state&&state.blockedReason?state.blockedReason:(gate.message||'هذا النوع من الزيارات غير متاح لهذه المحطة الآن.'));
 }
 
 /* يُستدعى بعد حفظ الزيارة: يسجّل استهلاك الفتح الإداري للتدقيق.
@@ -385,6 +424,91 @@ function satisfyLowerPriorityPlans_(computerNo, stationNo, completedType, visitD
     if(approverComputerNo)patch.APPROVER_COMPUTER_NO=approverComputerNo;
     patchRowByNumber_(sh,r+1,patch); count++;
   }
+  return count;
+}
+
+/* =====================================================================
+   V9 — سلّم التصعيد: العدّ من انتهاء مهلة المعالجة
+   ١٤ يومًا → مسؤول الإشراف · +١٤ → مسؤول تشغيل المنطقة · +٧ → مدير العمليات (النهاية)
+   ===================================================================== */
+const ESCALATION_ROLES_=Object.freeze({1:['SUPERVISION_MANAGER'],2:['REGION_MANAGER'],3:['OPERATIONS_MANAGER','OPERATIONS_DEPUTY']});
+const ESCALATION_LABEL_=Object.freeze({1:'مسؤول الإشراف',2:'مسؤول تشغيل المنطقة',3:'مدير العمليات'});
+function escalationThresholds_(){
+  const l1=Math.max(1,Number(settingValue_('ESCALATION_L1_DAYS','14'))||14);
+  const l2=l1+Math.max(1,Number(settingValue_('ESCALATION_L2_DAYS','14'))||14);
+  const l3=l2+Math.max(1,Number(settingValue_('ESCALATION_L3_DAYS','7'))||7);
+  return {1:l1,2:l2,3:l3};
+}
+function escalationTargetFor_(ownerNo,level){
+  return nearestAboveWithRole_(ownerNo,ESCALATION_ROLES_[level]||[]);
+}
+function escalateIssues_(ss,now,today){
+  const sh=ss.getSheetByName(APP.SHEETS.ISSUES), data=sh.getDataRange().getValues();
+  if(data.length<=1)return 0;
+  const idx=headerMap_(data[0].map(String));
+  if(idx.ESCALATION_LEVEL===undefined||idx.DUE_DATE===undefined)return 0;
+  const th=escalationThresholds_();
+  let count=0;
+  for(let r=1;r<data.length;r++){
+    const row=data[r], status=String(row[idx.STATUS]||'');
+    if(['CLOSED','CANCELED','PENDING_APPROVAL'].indexOf(status)!==-1)continue;
+    const due=dateKeyFromValue_(row[idx.DUE_DATE]);
+    if(!due||due>=today)continue;
+    const over=daysBetweenKeys_(due,today);
+    const target=over>=th[3]?3:(over>=th[2]?2:(over>=th[1]?1:0));
+    const current=Number(row[idx.ESCALATION_LEVEL]||0);
+    if(target<=current)continue;
+    const owner=String(row[idx.OWNER_COMPUTER_NO]||row[idx.CREATED_BY]||'');
+    const to=escalationTargetFor_(owner,target);
+    const issueId=String(row[idx.ISSUE_ID]||''), station=String(row[idx.STATION_NAME]||row[idx.STATION_NO]||''), item=String(row[idx.ITEM_TEXT]||'');
+    const patch={ESCALATION_LEVEL:target,LAST_UPDATED_AT:now};
+    if(idx.ESCALATED_TO!==undefined)patch.ESCALATED_TO=to;
+    if(idx.ESCALATED_AT!==undefined)patch.ESCALATED_AT=now;
+    Object.keys(patch).forEach(function(k){if(idx[k]!==undefined)sh.getRange(r+1,idx[k]+1).setValue(patch[k]);});
+    const lbl=ESCALATION_LABEL_[target];
+    if(to)notify_(to,'ISSUE_ESCALATED','ملاحظة مصعَّدة إليك — '+lbl,'الملاحظة «'+item+'» في '+station+' تجاوزت مهلتها بـ'+over+' يومًا ولم تُغلق. صُعِّدت إليك للإجراء'+(target===3?' — وهذه المحطة الأخيرة في سلّم التصعيد.':'.'),issueId,'SYSTEM');
+    if(owner)notify_(owner,'ISSUE_ESCALATED_INFO','صُعِّدت ملاحظتك إلى '+lbl,'الملاحظة «'+item+'» في '+station+' صُعِّدت إلى '+lbl+' لتجاوز المهلة.',issueId,'SYSTEM');
+    const asst=assistantOf_(owner);if(asst&&asst!==to)notify_(asst,'ISSUE_ESCALATED_INFO','ملاحظة لدى مشرفك صُعِّدت إلى '+lbl,'الملاحظة «'+item+'» في '+station+' لدى المشرف '+owner+' صُعِّدت إلى '+lbl+'.',issueId,'SYSTEM');
+    try{appendObject_(ss.getSheetByName(APP.SHEETS.ISSUE_UPDATES),{UPDATE_ID:'UPD-'+Utilities.getUuid(),ISSUE_ID:issueId,TIMESTAMP:now,COMPUTER_NO:'SYSTEM',ACTION:'ESCALATED_L'+target,COMMENT:'تصعيد تلقائي إلى '+lbl+(to?(' ('+to+')'):' (لم يُعثر على مستخدم بهذا الدور)'),STATUS_FROM:status,STATUS_TO:status});}catch(e){}
+    count++;
+  }
+  if(count)invalidateSheet_(sh);
+  return count;
+}
+
+/* تأخر الزيارة اليومية ١٥ يومًا لمحطة مسندة: تنبيه المشرف ومساعده ومدير العمليات — مرة لكل فترة تأخر. */
+function alertLateDailyVisits_(ss,today){
+  const limit=Math.max(1,Number(settingValue_('DAILY_LATE_DAYS','15'))||15);
+  const users=sheetObjects_(ss.getSheetByName(APP.SHEETS.USERS)).filter(function(u){return toBool_(u.ACTIVE)&&normalizeRoleId_(u.ROLE_ID||u.ROLE||'')==='SUPERVISOR';});
+  const lastDaily={},firstAny={};
+  sheetObjects_(ss.getSheetByName(APP.SHEETS.VISITS)).forEach(function(v){
+    if(String(v.APPROVAL_STATUS||'')==='REJECTED')return;
+    const k=String(v.COMPUTER_NO||'')+'|'+String(v.STATION_NO||''), d=dateKeyFromValue_(v.DATE);
+    if(!d)return;
+    if(!firstAny[k]||d<firstAny[k])firstAny[k]=d;
+    if(String(v.VISIT_TYPE||'')==='DAILY'&&(!lastDaily[k]||d>lastDaily[k]))lastDaily[k]=d;
+  });
+  const sent={};
+  sheetObjects_(ss.getSheetByName(APP.SHEETS.NOTIFICATIONS)).forEach(function(n){if(String(n.TYPE||'')==='DAILY_LATE')sent[String(n.REFERENCE||'')]=true;});
+  const ops=nearestAboveWithRole_('',['OPERATIONS_MANAGER','OPERATIONS_DEPUTY']);
+  let count=0;
+  users.forEach(function(u){
+    const no=String(u.COMPUTER_NO||'');
+    csvArray_(u.STATION_NOS).forEach(function(st){
+      const k=no+'|'+st, last=lastDaily[k]||'', base=last||firstAny[k]||'';
+      if(!base)return; // لم يزر المحطة قط — لا مرجع زمني بعد
+      const gap=daysBetweenKeys_(base,today);
+      if(gap<limit)return;
+      const ref='DAILY_LATE|'+no+'|'+st+'|'+(last||'none');
+      if(sent[ref])return;
+      const station=findStation_(st), name=station?station.stationName:('محطة '+st);
+      const body='المحطة '+name+' #'+st+' لم تُسجَّل لها زيارة يومية منذ '+gap+' يومًا'+(last?(' (آخر يومية '+last+')'):'')+'.';
+      notify_(no,'DAILY_LATE','تأخر الزيارة اليومية',body,ref,'SYSTEM');
+      const asst=assistantOf_(no);if(asst)notify_(asst,'DAILY_LATE','مشرفك تأخر في الزيارة اليومية','المشرف '+String(u.NAME||no)+': '+body,ref,'SYSTEM');
+      if(ops&&ops!==asst)notify_(ops,'DAILY_LATE','تأخر زيارة يومية','المشرف '+String(u.NAME||no)+': '+body,ref,'SYSTEM');
+      sent[ref]=true;count++;
+    });
+  });
   return count;
 }
 
@@ -460,9 +584,13 @@ function runWorkflowMonitor(){
     if(pi.LAST_MISSED_ALERT_KEY!==undefined)plansSh.getRange(r+1,pi.LAST_MISSED_ALERT_KEY+1).setValue(key);
     missedAlerts++;
   }
+  // V9
+  let escalations=0,dailyLate=0;
+  try{escalations=escalateIssues_(ss,now,today);}catch(e){Logger.log('escalateIssues_: '+e.message);}
+  try{dailyLate=alertLateDailyVisits_(ss,today);}catch(e){Logger.log('alertLateDailyVisits_: '+e.message);}
   invalidateAllSheetCache_();
-  Logger.log(JSON.stringify({approvalAlerts:approvalAlerts,issueAlerts:issueAlerts,missedAlerts:missedAlerts}));
-  return {ok:true,approvalAlerts:approvalAlerts,issueAlerts:issueAlerts,missedAlerts:missedAlerts};
+  Logger.log(JSON.stringify({approvalAlerts:approvalAlerts,issueAlerts:issueAlerts,missedAlerts:missedAlerts,escalations:escalations,dailyLate:dailyLate}));
+  return {ok:true,approvalAlerts:approvalAlerts,issueAlerts:issueAlerts,missedAlerts:missedAlerts,escalations:escalations,dailyLate:dailyLate};
 }
 
 function migrateWorkflowData_(){

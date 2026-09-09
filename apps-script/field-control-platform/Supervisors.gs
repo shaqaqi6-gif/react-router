@@ -1,13 +1,19 @@
 /* =====================================================================
    Supervisors.gs — لوحة أداء المشرفين للمدير/المساعد/مدير المنطقة
-   V8.2.0 · شركة الدريس
+   V9.0.0 · شركة الدريس
    ===================================================================== */
 
+/* V9: المشرف مرئي لمن هو في فريقه (الهيكل الذي يحدده مدير النظام)، ولمن يرى الكل. */
 function supervisorVisibleTo_(session,u){
   if(!u||normalizeRoleId_(u.ROLE_ID||u.ROLE||'')!=='SUPERVISOR')return false;
-  if(session.roleId==='SYSTEM_ADMIN'||hasPermission_(session,'DASHBOARD_VIEW_ALL')||hasPermission_(session,'VISIT_VIEW_ALL'))return true;
+  if(seesAll_(session))return true;
+  const no=String(u.COMPUTER_NO||'');
   if(String(u.APPROVER_COMPUTER_NO||'')===session.computerNo||String(u.MANAGER_COMPUTER_NO||'')===session.computerNo)return true;
-  if(session.roleId==='APPROVAL_ASSISTANT')return false;
+  if(usesTeamScope_(session)){
+    if(teamOf_(session.computerNo).size)return inTeam_(session,no);
+    return false; // الهيكل لم يُضبط بعد لهذا المستخدم → لا يرى أحدًا حتى يضبطه مدير النظام
+  }
+  if(hasPermission_(session,'DASHBOARD_VIEW_ALL')||hasPermission_(session,'VISIT_VIEW_ALL'))return true;
   const regs=csvArray_(u.REGIONS); if(!regs.length&&scopeIsOpen_(session))return true;
   return regs.some(function(r){return session.regions.indexOf(r)!==-1;});
 }
@@ -39,7 +45,8 @@ function getSupervisors(token,filters){
     const gpsRows=uv.filter(function(v){return String(v.GPS_MATCH_STATUS||'')!=='';}),gpsMatch=gpsRows.length?round1_(gpsRows.filter(function(v){return String(v.GPS_MATCH_STATUS||'')==='MATCH';}).length/gpsRows.length*100):0;
     // V8.1.4.7: المقارنة بمفتاح التاريخ بتوقيت الرياض بدل الطوابع الزمنية الخام (كانت تُحسب أحياناً يوماً ناقصاً).
     const inTimeIssues=ui.filter(function(x){if(String(x.STATUS||'')!=='CLOSED')return false;const due=dateKeyFromValue_(x.DUE_DATE),closedAt=dateKeyFromValue_(x.CLOSED_AT);return !!due&&!!closedAt&&closedAt<=due;}).length;
-    return{computerNo:no,name:String(u.NAME||''),phone:String(u.PHONE||''),regions:csvArray_(u.REGIONS),approverComputerNo:String(u.APPROVER_COMPUTER_NO||''),assignedStations:Object.keys(assigned).length,requiredVisits:required,visits:uv.length,approvedVisits:approved,pendingVisits:pending,rejectedVisits:rejected,missedVisits:missed,scheduleCompliance:required?round1_(Math.min(uv.length,required)/required*100):(uv.length?100:0),avgScore:avg,issuesTotal:ui.length,openIssues:open,closedIssues:closed,overdueIssues:overdue,awaitingVerification:dueVerify,issueClosureRate:ui.length?round1_(closed/ui.length*100):100,issuesClosedInTime:inTimeIssues,gpsMatchRate:gpsMatch};
+    const asstNo=String(u.APPROVER_COMPUTER_NO||''), asstU=asstNo?findUserByComputerNo_(asstNo):null;
+    return{computerNo:no,name:String(u.NAME||''),phone:String(u.PHONE||''),regions:csvArray_(u.REGIONS),approverComputerNo:asstNo,assistantName:asstU?String(asstU.NAME||asstNo):(asstNo||'بلا مساعد'),assignedStations:Object.keys(assigned).length,requiredVisits:required,visits:uv.length,approvedVisits:approved,pendingVisits:pending,rejectedVisits:rejected,missedVisits:missed,scheduleCompliance:required?round1_(Math.min(uv.length,required)/required*100):(uv.length?100:0),avgScore:avg,issuesTotal:ui.length,openIssues:open,closedIssues:closed,overdueIssues:overdue,awaitingVerification:dueVerify,issueClosureRate:ui.length?round1_(closed/ui.length*100):100,issuesClosedInTime:inTimeIssues,gpsMatchRate:gpsMatch};
   }).sort(function(a,b){return b.missedVisits-a.missedVisits||b.overdueIssues-a.overdueIssues||a.name.localeCompare(b.name,'ar');});
 }
 

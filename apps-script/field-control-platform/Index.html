@@ -361,6 +361,33 @@ td strong{color:var(--dark);font-weight:600}
 .visit-gate.suggest{border-color:var(--blue-100);background:var(--blue-50)}
 .visit-gate.suggest strong{color:var(--dark)}
 .visit-gate.suggest p{color:var(--mid)}
+/* V9: طلبات زيارة مفتوحة على المحطة */
+.visit-gate.request{border-color:#BFD7F5;background:#EEF5FF}
+.visit-gate.request strong{color:#1F4E8C}.visit-gate.request p{color:#3D5A80}
+.visit-gate.request ul{margin:6px 0 0;padding:0 18px 0 0;color:#3D5A80;font-size:12px;line-height:1.8}
+/* V9: القوائم القابلة للطي */
+.collapse{border:1px solid var(--line);border-radius:var(--r-md);background:#fff;margin-bottom:10px;overflow:hidden}
+.collapse-head{display:flex;align-items:center;gap:10px;width:100%;padding:12px 14px;background:none;border:0;cursor:pointer;text-align:right;font:inherit;color:var(--dark);font-weight:700;transition:background .15s}
+.collapse-head:hover{background:var(--blue-50)}
+.collapse-head .badge{margin-inline-start:auto}
+.collapse-head .count{margin-inline-start:auto;background:var(--blue-50);color:var(--blue);border-radius:999px;padding:2px 10px;font-size:12px;font-weight:700}
+.collapse-chev{flex:none;transition:transform .2s;color:var(--mid);font-size:20px;line-height:1;display:inline-block;transform:rotate(90deg)}
+.collapse.open .collapse-chev{transform:rotate(-90deg)}
+.collapse-body{display:none;padding:0 14px 14px;border-top:1px solid var(--line)}
+.collapse.open .collapse-body{display:block}
+/* V9: رابط سجل المحطة داخل بطاقة المحطة */
+.station-log-link{position:absolute;bottom:10px;left:12px;font-size:11px;color:var(--blue);font-weight:700;padding:2px 8px;border-radius:999px;background:var(--blue-50)}
+.station-log-link:hover{background:var(--blue-100)}
+.station-card:has(.station-log-link){padding-bottom:34px}
+/* V9: سجل المحطة حسب تاريخ الزيارة */
+.log-visit{border:1px solid var(--line);border-radius:var(--r-md);background:#fff;margin-bottom:10px;overflow:hidden}
+.log-visit-head{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px;padding:10px 14px;background:var(--surface,#F7F9FC);border-bottom:1px solid var(--line)}
+.log-visit-head strong{font-size:13px}.log-visit-head span{font-size:12px;color:var(--mid)}
+.req-card{border:1px solid var(--line);border-radius:var(--r-md);background:#fff;padding:12px 14px;margin-bottom:10px;display:grid;gap:6px}
+.req-card.open{border-inline-start:4px solid var(--blue)}
+.req-card.done{opacity:.75}
+.req-card .req-row{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:12px;color:var(--mid)}
+.req-card .req-actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:4px}
 /* جدول حالة الزيارات داخل ملف المشرف */
 .gate-list{display:grid;gap:8px}
 .gate-row{display:grid;grid-template-columns:minmax(0,1.5fr) repeat(2,minmax(150px,1fr));gap:10px;align-items:stretch;border:1px solid var(--line);border-radius:var(--r-sm);padding:10px 12px;background:#fff}
@@ -743,7 +770,7 @@ input[type="file"]{width:100%}
 }
 /* V8.2.2 — كناري اكتمال اللصق: آخر قاعدة في الملف.
    لو وصل Index ناقصًا فلن تُعرّف هذه الخاصية، وتكشفها الواجهة عند الدخول. */
-:root{--ui-css-complete:1;--ui-version:"8.3.2"}
+:root{--ui-css-complete:1;--ui-version:"9.0.0"}
 @media print{
   .topbar,.sidebar,.footer-actions,.page-actions,.btn{display:none!important}
   .workspace{display:block;padding:0}

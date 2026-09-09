@@ -1,10 +1,10 @@
 /* =====================================================================
    منصة الرقابة والزيارات الميدانية — Core: الإعدادات، تشغيل التطبيق، المصادقة، الجلسات، الصلاحيات، الأدوات المساعدة
-   V8.3.2 · شركة الدريس
+   V9.0.0 · شركة الدريس
    ===================================================================== */
 
 const APP = Object.freeze({
-  VERSION: '8.3.2',
+  VERSION: '9.0.0',
   NAME: 'منصة الرقابة والزيارات الميدانية',
   COMPANY: 'شركة الدريس للخدمات البترولية والنقليات',
   DB_PROP: 'ALDREES_CHECKLIST_DB_ID',
@@ -31,7 +31,8 @@ const APP = Object.freeze({
     TICKETS: 'TICKETS',
     TICKET_MESSAGES: 'TICKET_MESSAGES',
     STATION_ASSIGNMENTS: 'STATION_ASSIGNMENTS',
-    VISIT_UNLOCKS: 'VISIT_UNLOCKS'
+    VISIT_UNLOCKS: 'VISIT_UNLOCKS',
+    VISIT_REQUESTS: 'VISIT_REQUESTS'
   },
   VISIT_TYPES: {
     DAILY: 'يومية',
@@ -103,7 +104,9 @@ const HEADERS = Object.freeze({
     'REGION','CITY','BRANCH','CREATED_AT','CREATED_BY','STATUS','SEVERITY','NOTE','PHOTO_URL',
     'OWNER_COMPUTER_NO','DUE_DATE','CLOSED_AT','CLOSED_BY','LAST_UPDATED_AT','REPEAT_KEY',
     'APPROVED_AT','DUE_DAYS','REMEDIATION_SUBMITTED_AT','REMEDIATION_NOTE','REMEDIATION_PHOTO_URL',
-    'VERIFIED_AT','VERIFIED_BY','RETURN_REASON','OVERDUE_NOTIFIED_AT','ESCALATION_LEVEL'
+    'VERIFIED_AT','VERIFIED_BY','RETURN_REASON','OVERDUE_NOTIFIED_AT','ESCALATION_LEVEL',
+    /* V9: سلّم التصعيد وعلامة الأولوية */
+    'ESCALATED_TO','ESCALATED_AT','PRIORITY','PRIORITY_BY','PRIORITY_AT'
   ],
   ISSUE_UPDATES: [
     'UPDATE_ID','ISSUE_ID','TIMESTAMP','COMPUTER_NO','ACTION','COMMENT','PHOTO_URL','STATUS_FROM','STATUS_TO'
@@ -121,7 +124,9 @@ const HEADERS = Object.freeze({
   STATION_ASSIGNMENTS: ['ASSIGNMENT_ID','SUPERVISOR_COMPUTER_NO','STATION_NO','REQUESTED_BY','REQUESTED_AT','STATUS','APPROVED_BY','APPROVED_AT','REJECTED_BY','REJECTED_AT','DECISION_COMMENT','ACTIVE','UPDATED_AT'],
   /* V8.2: فتح إداري لنوع زيارة لمشرف في محطة بعينها.
      CYCLE_KEY يحمل دورة الفتح (مثل MONTHLY|3) فينتهي مفعوله تلقائيًا ببداية الدورة التالية. */
-  VISIT_UNLOCKS: ['UNLOCK_ID','COMPUTER_NO','STATION_NO','VISIT_TYPE','CYCLE_KEY','ANCHOR_DATE','CYCLE_START','CYCLE_END','REASON','ACTIVE','CREATED_AT','CREATED_BY','REVOKED_AT','REVOKED_BY','CONSUMED_AT','CONSUMED_BY_VISIT_ID']
+  VISIT_UNLOCKS: ['UNLOCK_ID','COMPUTER_NO','STATION_NO','VISIT_TYPE','CYCLE_KEY','ANCHOR_DATE','CYCLE_START','CYCLE_END','REASON','ACTIVE','CREATED_AT','CREATED_BY','REVOKED_AT','REVOKED_BY','CONSUMED_AT','CONSUMED_BY_VISIT_ID'],
+  /* V9: طلب زيارة من مدير العمليات → مساعد الإشراف → المشرف */
+  VISIT_REQUESTS: ['REQUEST_ID','STATION_NO','STATION_NAME','VISIT_TYPE','NOTE','DUE_DATE','STATUS','REQUESTED_BY','REQUESTED_AT','SUPERVISOR_COMPUTER_NO','ASSISTANT_COMPUTER_NO','ASSIGNED_AT','ASSIGNED_BY','DONE_VISIT_ID','DONE_AT','CANCELED_AT','CANCELED_BY','UPDATED_AT']
 });
 
 
@@ -129,9 +134,9 @@ const HEADERS = Object.freeze({
    Server self-check (V6.2) — يكشف أي ملف .gs وصل ناقصاً عند اللصق
    ========================= */
 const EXPECTED_FUNCTIONS_ = Object.freeze({
-  'Code.gs':['doGet','login','resumeSession','getServerHealth'],
-  'Visits.gs':['getDashboard','searchStations','getStation','getChecklist','saveVisit','getMyVisits','getVisitDetail','adminListVisits','approveVisit','getApprovalQueue','getMySchedule','getMyIssues','submitIssueResolution','verifyIssueResolution','adminListIssues','adminListVisitPlans','adminSaveVisitPlan','calculatePlanMetrics_','adminUnlockVisitType','adminRevokeVisitUnlock','adminListVisitUnlocks','listApproverCandidates','adminReassignApprover','sessionForUser_','getBadgeCounts','markAllNotificationsRead'],
-  'Workflow.gs':['runWorkflowMonitor','installWorkflowTrigger','resolveApproverForSupervisor_','updatePlanAfterVisit_','nextDueFromAnchor_','getVisitGate','assertVisitTypeAllowed_','satisfyLowerPriorityPlans_','visitAnchorDate_','visitCycleInfo_','visitGateForRows_','markVisitUnlockUsed_'],
+  'Code.gs':['doGet','login','resumeSession','getServerHealth','teamOf_','chainAbove_','inTeam_'],
+  'Visits.gs':['getDashboard','searchStations','getStation','getChecklist','saveVisit','getMyVisits','getVisitDetail','adminListVisits','approveVisit','getApprovalQueue','getMySchedule','getMyIssues','submitIssueResolution','verifyIssueResolution','adminListIssues','adminListVisitPlans','adminSaveVisitPlan','calculatePlanMetrics_','adminUnlockVisitType','adminRevokeVisitUnlock','adminListVisitUnlocks','listApproverCandidates','adminReassignApprover','sessionForUser_','getBadgeCounts','markAllNotificationsRead','setIssuePriority','getStationIssueLog','createVisitRequest','listVisitRequests','reassignVisitRequest','cancelVisitRequest','getMyTeam'],
+  'Workflow.gs':['runWorkflowMonitor','installWorkflowTrigger','resolveApproverForSupervisor_','updatePlanAfterVisit_','nextDueFromAnchor_','getVisitGate','assertVisitTypeAllowed_','satisfyLowerPriorityPlans_','visitAnchorDate_','visitCycleInfo_','visitGateForRows_','markVisitUnlockUsed_','escalateIssues_','alertLateDailyVisits_','canActOnIssue_'],
   'Admin.gs':['getAdminDashboard','adminBootstrap','adminListUsers','adminSaveUser','adminListRoles','adminSaveRole','adminListChecklist','adminSaveChecklistItem','getStationAssignmentMeta','listStationAssignments','requestStationAssignment','requestStationAssignments','decideStationAssignment','decideStationAssignments'],
   'Supervisors.gs':['getSupervisors','getSupervisorDetail'],
   'Support.gs':['getTicketMeta','createTicket','listMyTickets','getTicket','replyTicket','adminListTickets','adminUpdateTicket']
@@ -230,6 +235,7 @@ function setupOrUpgradeV4_() {
   ensureSheet_(ss, APP.SHEETS.TICKET_MESSAGES, HEADERS.TICKET_MESSAGES);
   ensureSheet_(ss, APP.SHEETS.STATION_ASSIGNMENTS, HEADERS.STATION_ASSIGNMENTS);
   ensureSheet_(ss, APP.SHEETS.VISIT_UNLOCKS, HEADERS.VISIT_UNLOCKS);
+  ensureSheet_(ss, APP.SHEETS.VISIT_REQUESTS, HEADERS.VISIT_REQUESTS);
 
   seedSettings_(ss);
   seedRoles_(ss);
@@ -473,6 +479,91 @@ function normalizeScopeMode_(value,roleId){
   return ['ALL','REGIONS','STATIONS','MIXED'].indexOf(def)!==-1?def:'REGIONS';
 }
 
+/* =====================================================================
+   V9 — النطاق الهرمي (يحدده مدير النظام من سجل المستخدم)
+   المشرف يتبع مساعده عبر APPROVER_COMPUTER_NO، وكل من فوقه يتبع مديره عبر MANAGER_COMPUTER_NO.
+   كل دور يرى فريقه فقط: من تحته مباشرة ومن تحتهم، إلى آخر السلسلة.
+   ===================================================================== */
+const HIERARCHY_ROLES_=Object.freeze(['APPROVAL_ASSISTANT','SUPERVISION_MANAGER','REGION_MANAGER']);
+const SEE_ALL_ROLES_=Object.freeze(['OPERATIONS_MANAGER','OPERATIONS_DEPUTY']);
+const ROLE_RANK_=Object.freeze({SUPERVISOR:0,APPROVAL_ASSISTANT:1,SUPERVISION_MANAGER:2,REGION_MANAGER:3,OPERATIONS_DEPUTY:4,OPERATIONS_MANAGER:4,SYSTEM_ADMIN:9});
+
+function parentOfUser_(u){
+  const rid=normalizeRoleId_(u.ROLE_ID||u.ROLE||'');
+  if(rid==='SUPERVISOR')return String(u.APPROVER_COMPUTER_NO||'')||String(u.MANAGER_COMPUTER_NO||'');
+  return String(u.MANAGER_COMPUTER_NO||'');
+}
+function usesTeamScope_(session){
+  return !!session&&HIERARCHY_ROLES_.indexOf(session.roleId)!==-1;
+}
+function seesAll_(session){
+  return !!session&&(session.roleId==='SYSTEM_ADMIN'||SEE_ALL_ROLES_.indexOf(session.roleId)!==-1||session.scopeMode==='ALL');
+}
+/* الفريق الكامل تحت مستخدم: أعضاؤه، مشرفوه، ومحطات مشرفيه. يُحسب مرة واحدة لكل تنفيذ. */
+function teamOf_(computerNo){
+  const key='TEAM_'+String(computerNo||'');
+  if(MEMO_[key])return MEMO_[key];
+  const users=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(u){return toBool_(u.ACTIVE);});
+  const byNo={},children={};
+  users.forEach(function(u){
+    const no=String(u.COMPUTER_NO||'');byNo[no]=u;
+    const p=parentOfUser_(u);
+    if(p&&p!==no)(children[p]||(children[p]=[])).push(no);
+  });
+  const members={},supervisors={},stations={};
+  const queue=(children[String(computerNo)]||[]).slice();
+  let guard=0;
+  while(queue.length&&guard++<5000){
+    const no=queue.shift();
+    if(members[no])continue;
+    members[no]=true;
+    const u=byNo[no];
+    if(u&&normalizeRoleId_(u.ROLE_ID||u.ROLE||'')==='SUPERVISOR'){
+      supervisors[no]=true;
+      csvArray_(u.STATION_NOS).forEach(function(st){stations[String(st)]=true;});
+    }
+    (children[no]||[]).forEach(function(c){queue.push(c);});
+  }
+  const team={members:members,supervisors:supervisors,stations:stations,size:Object.keys(members).length};
+  MEMO_[key]=team;
+  return team;
+}
+function inTeam_(session,computerNo){
+  computerNo=String(computerNo||'');
+  if(!computerNo)return false;
+  if(computerNo===session.computerNo)return true;
+  return !!teamOf_(session.computerNo).members[computerNo];
+}
+/* السلسلة الإدارية فوق مستخدم — تُستخدم في التصعيد. */
+function chainAbove_(computerNo){
+  const out=[];let cur=findUserByComputerNo_(computerNo),guard=0,seen={};
+  while(cur&&guard++<20){
+    const p=parentOfUser_(cur);
+    if(!p||seen[p])break;
+    seen[p]=true;
+    const pu=findUserByComputerNo_(p);
+    if(!pu)break;
+    out.push({computerNo:p,roleId:normalizeRoleId_(pu.ROLE_ID||pu.ROLE||''),name:String(pu.NAME||'')});
+    cur=pu;
+  }
+  return out;
+}
+function nearestAboveWithRole_(computerNo,roles){
+  const chain=chainAbove_(computerNo);
+  for(let i=0;i<chain.length;i++)if(roles.indexOf(chain[i].roleId)!==-1)return chain[i].computerNo;
+  // لا أحد في السلسلة بهذا الدور → أول مستخدم فعّال يحمله
+  const users=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS));
+  for(let r=0;r<roles.length;r++)for(let i=0;i<users.length;i++){
+    if(!toBool_(users[i].ACTIVE))continue;
+    if(normalizeRoleId_(users[i].ROLE_ID||users[i].ROLE||'')===roles[r])return String(users[i].COMPUTER_NO||'');
+  }
+  return '';
+}
+function assistantOf_(supervisorNo){
+  const u=findUserByComputerNo_(supervisorNo);
+  return u?(String(u.APPROVER_COMPUTER_NO||'')||nearestAboveWithRole_(supervisorNo,['APPROVAL_ASSISTANT'])):'';
+}
+
 function scopeIsOpen_(session){
   // V8.1.3: المشرف لا يملك نطاقاً مفتوحاً؛ لا يرى إلا المحطات المعتمدة والمخصصة له.
   if(session && session.roleId==='SUPERVISOR')return false;
@@ -496,7 +587,14 @@ function stationAllowed_(session,s){
   if(session.roleId==='SUPERVISOR'){
     return !!supervisorStationSet_(session.computerNo)[String(s.stationNo||'')];
   }
-  if(session.scopeMode==='ALL' || scopeIsOpen_(session))return true;
+  if(seesAll_(session))return true;
+  if(usesTeamScope_(session)){
+    const team=teamOf_(session.computerNo);
+    if(team.size)return !!team.stations[String(s.stationNo||'')];
+    // انتقالي: فريق فارغ (لم يُضبط الهيكل بعد) → النطاق الجغرافي القديم إن وُجد، وإلا لا شيء
+    if(!(session.regions&&session.regions.length)&&!(session.stationNos&&session.stationNos.length))return false;
+  }
+  if(scopeIsOpen_(session))return true;
   const regionMatch=session.regions.indexOf(String(s.region||''))!==-1 || session.regions.indexOf(String(s.branch||''))!==-1;
   const stationMatch=session.stationNos.indexOf(String(s.stationNo||''))!==-1;
   if(session.scopeMode==='REGIONS')return regionMatch;
@@ -506,12 +604,20 @@ function stationAllowed_(session,s){
 }
 
 function visitAllowed_(session,v){
-  if(session.roleId==='SYSTEM_ADMIN' || session.scopeMode==='ALL')return true;
+  if(seesAll_(session))return true;
+  if(String(v.COMPUTER_NO||'')===session.computerNo)return true;
+  // V9: في النطاق الهرمي المرجع هو منفّذ الزيارة — هل هو في فريقي؟
+  if(usesTeamScope_(session)&&teamOf_(session.computerNo).size)return inTeam_(session,v.COMPUTER_NO);
   const s={stationNo:String(v.STATION_NO||''),region:String(v.REGION||''),branch:String(v.BRANCH||'')};
   return stationAllowed_(session,s);
 }
 function issueAllowed_(session,x){
-  if(session.roleId==='SYSTEM_ADMIN' || session.scopeMode==='ALL')return true;
+  if(seesAll_(session))return true;
+  const owner=String(x.OWNER_COMPUTER_NO||x.CREATED_BY||'');
+  if(owner===session.computerNo)return true;
+  // الملاحظة المصعَّدة إليّ أراها ولو كانت خارج فريقي
+  if(String(x.ESCALATED_TO||'')===session.computerNo)return true;
+  if(usesTeamScope_(session)&&teamOf_(session.computerNo).size)return inTeam_(session,owner);
   const s={stationNo:String(x.STATION_NO||''),region:String(x.REGION||''),branch:String(x.BRANCH||'')};
   return stationAllowed_(session,s);
 }
@@ -556,7 +662,7 @@ function ensureSheet_(ss,name,headers){
   return sh;
 }
 
-const TEXT_COLUMNS_=['COMPUTER_NO','STATION_NO','DATE','START_DATE','END_DATE','OWNER_COMPUTER_NO','REGIONS','STATION_NOS','SYSTEM_ID','ITEM_ID','APPROVER_COMPUTER_NO','MANAGER_COMPUTER_NO','ASSIGNMENT_ID','SUPERVISOR_COMPUTER_NO','REQUESTED_BY','APPROVED_BY','REJECTED_BY','UNLOCK_ID','CYCLE_KEY','CYCLE_START','CYCLE_END','REVOKED_BY','CONSUMED_BY_VISIT_ID'];
+const TEXT_COLUMNS_=['COMPUTER_NO','STATION_NO','DATE','START_DATE','END_DATE','OWNER_COMPUTER_NO','REGIONS','STATION_NOS','SYSTEM_ID','ITEM_ID','APPROVER_COMPUTER_NO','MANAGER_COMPUTER_NO','ASSIGNMENT_ID','SUPERVISOR_COMPUTER_NO','REQUESTED_BY','APPROVED_BY','REJECTED_BY','UNLOCK_ID','CYCLE_KEY','CYCLE_START','CYCLE_END','REVOKED_BY','CONSUMED_BY_VISIT_ID','REQUEST_ID','ESCALATED_TO','PRIORITY_BY','ASSISTANT_COMPUTER_NO','ASSIGNED_BY','CANCELED_BY','DONE_VISIT_ID','DUE_DATE'];
 function applyTextColumnFormats_(sh){
   const lc=sh.getLastColumn();if(!lc)return;
   const headers=sh.getRange(1,1,1,lc).getValues()[0].map(String);
