@@ -542,9 +542,17 @@ function adminSaveChecklistItem(token,payload){
    Reports
    ========================= */
 
-function exportDashboardReport(token,filters){
+function exportDashboardReport(token,filters,lang){
   const session=requireSession_(token);
   requirePermission_(session,'REPORT_EXPORT');
+  /* V9.5: عناوين التقرير بلغة المستخدم (ar/en/ur) */
+  lang=String(lang||'ar');
+  const L=function(ar,en,ur){return (typeof xl_==='function')?xl_(lang,ar,en,ur):ar;};
+  const VT={DAILY:L('يومية','Daily','روزانہ'),BIWEEKLY:L('أسبوعية','Weekly','ہفتہ وار'),MONTHLY:L('شهرية','Monthly','ماہانہ')};
+  const AP={APPROVED:L('معتمدة','Approved','منظور شدہ'),REJECTED:L('مرفوضة','Rejected','مسترد'),PENDING:L('بانتظار الاعتماد','Pending approval','منظوری کا منتظر')};
+  const ST={PENDING_APPROVAL:L('بانتظار اعتماد الزيارة','Pending visit approval','دورے کی منظوری کا منتظر'),OPEN:L('مفتوحة','Open','کھلا'),IN_PROGRESS:L('تحت المعالجة','In progress','زیر عمل'),OVERDUE:L('متأخرة','Overdue','تاخیر شدہ'),AWAITING_VERIFICATION:L('بانتظار التحقق','Awaiting verification','تصدیق کا منتظر'),RETURNED:L('معادة للمشرف','Returned to supervisor','سپروائزر کو واپس'),RESOLVED:L('تمت المعالجة','Resolved','حل شدہ'),CLOSED:L('مغلقة','Closed','بند'),CANCELED:L('ملغاة','Canceled','منسوخ')};
+  const SV={LOW:L('منخفضة','Low','کم'),MEDIUM:L('متوسطة','Medium','درمیانی'),HIGH:L('عالية','High','زیادہ'),CRITICAL:L('حرجة','Critical','انتہائی اہم')};
+  const pick=function(map,k){return map[String(k||'')]||String(k||'');};
   const dash=getAdminDashboard(token,filters||{});
   const visits=adminListVisits(token,filters||{});
   const issues=adminListIssues(token,{
@@ -553,34 +561,34 @@ function exportDashboardReport(token,filters){
   });
 
   const report=SpreadsheetApp.create('Aldrees Field Control Report '+dateKey_(new Date()));
-  const s1=report.getSheets()[0];s1.setName('Summary');
+  const s1=report.getSheets()[0];s1.setName(L('الملخص','Summary','خلاصہ'));
   const summary=[
-    ['تقرير الرقابة الميدانية - الدريس',''],
-    ['تاريخ الإنشاء',dash.generatedAt],
-    ['المحطات النشطة',dash.kpis.activeStations],
-    ['الزيارات المنفذة',dash.kpis.totalVisits],
-    ['متوسط الالتزام %',dash.kpis.avgScore],
-    ['حالات عدم المطابقة',dash.kpis.totalFails],
-    ['الملاحظات المفتوحة',dash.kpis.openIssues],
-    ['الملاحظات الحرجة المفتوحة',dash.kpis.criticalOpen],
-    ['الزيارات المطلوبة حسب الخطة',dash.kpis.requiredVisits],
-    ['الزيارات المتأخرة حسب الخطة',dash.kpis.overdueVisits]
+    [L('تقرير الرقابة الميدانية - الدريس','Field Control Report - Aldrees','فیلڈ کنٹرول رپورٹ - الدریس'),''],
+    [L('تاريخ الإنشاء','Generated at','تیاری کی تاریخ'),dash.generatedAt],
+    [L('المحطات النشطة','Active stations','فعال اسٹیشنز'),dash.kpis.activeStations],
+    [L('الزيارات المنفذة','Visits completed','مکمل دورے'),dash.kpis.totalVisits],
+    [L('متوسط الالتزام %','Average compliance %','اوسط تعمیل %'),dash.kpis.avgScore],
+    [L('حالات عدم المطابقة','Non-conformities','عدم مطابقت کے کیس'),dash.kpis.totalFails],
+    [L('الملاحظات المفتوحة','Open issues','کھلے مشاہدات'),dash.kpis.openIssues],
+    [L('الملاحظات الحرجة المفتوحة','Open critical issues','کھلے انتہائی اہم مشاہدات'),dash.kpis.criticalOpen],
+    [L('الزيارات المطلوبة حسب الخطة','Visits required by plan','منصوبے کے مطابق مطلوبہ دورے'),dash.kpis.requiredVisits],
+    [L('الزيارات المتأخرة حسب الخطة','Overdue visits by plan','منصوبے کے مطابق تاخیر شدہ دورے'),dash.kpis.overdueVisits]
   ];
   s1.getRange(1,1,summary.length,2).setValues(summary);
   styleReportHeader_(s1.getRange(1,1,1,2));
 
-  const s2=report.insertSheet('Visits');
-  const vh=['VISIT_ID','DATE','COMPUTER_NO','SUPERVISOR','STATION_NO','STATION_NAME','REGION','BRANCH','VISIT_TYPE','SCORE','FAIL_COUNT','DURATION_MIN','APPROVAL'];
+  const s2=report.insertSheet(L('الزيارات','Visits','دورے'));
+  const vh=[L('رقم الزيارة','Visit ID','دورہ نمبر'),L('التاريخ','Date','تاریخ'),L('رقم الكمبيوتر','Computer No.','کمپیوٹر نمبر'),L('المشرف','Supervisor','سپروائزر'),L('رقم المحطة','Station No.','اسٹیشن نمبر'),L('اسم المحطة','Station name','اسٹیشن کا نام'),L('المنطقة','Region','علاقہ'),L('الفرع','Branch','برانچ'),L('نوع الزيارة','Visit type','دورے کی قسم'),L('النتيجة %','Score %','اسکور %'),L('غير مطابق','Fails','ناکام آئٹمز'),L('المدة (دقيقة)','Duration (min)','دورانیہ (منٹ)'),L('الاعتماد','Approval','منظوری')];
   s2.getRange(1,1,1,vh.length).setValues([vh]);styleReportHeader_(s2.getRange(1,1,1,vh.length));
   if(visits.length)s2.getRange(2,1,visits.length,vh.length).setValues(visits.map(function(v){return[
-    v.visitId,v.date,v.computerNo,v.supervisor,v.stationNo,v.stationName,v.region,v.branch,v.visitType,v.score,v.failCount,v.durationMinutes,v.approvalStatus
+    v.visitId,v.date,v.computerNo,v.supervisor,v.stationNo,v.stationName,v.region,v.branch,pick(VT,v.visitType),v.score,v.failCount,v.durationMinutes,pick(AP,v.approvalStatus)
   ];}));
 
-  const s3=report.insertSheet('Issues');
-  const ih=['ISSUE_ID','STATION_NO','STATION_NAME','REGION','CATEGORY','ITEM_TEXT','STATUS','SEVERITY','NOTE','AGE_DAYS','CREATED_BY'];
+  const s3=report.insertSheet(L('الملاحظات','Issues','مشاہدات'));
+  const ih=[L('رقم الملاحظة','Issue ID','مشاہدہ نمبر'),L('رقم المحطة','Station No.','اسٹیشن نمبر'),L('اسم المحطة','Station name','اسٹیشن کا نام'),L('المنطقة','Region','علاقہ'),L('التصنيف','Category','زمرہ'),L('البند','Item','آئٹم'),L('الحالة','Status','حالت'),L('الخطورة','Severity','شدت'),L('الملاحظة','Note','نوٹ'),L('العمر (يوم)','Age (days)','عمر (دن)'),L('سجّلها','Created by','درج کنندہ')];
   s3.getRange(1,1,1,ih.length).setValues([ih]);styleReportHeader_(s3.getRange(1,1,1,ih.length));
   if(issues.length)s3.getRange(2,1,issues.length,ih.length).setValues(issues.map(function(x){return[
-    x.issueId,x.stationNo,x.stationName,x.region,x.category,x.itemText,x.status,x.severity,x.note,x.ageDays,x.createdBy
+    x.issueId,x.stationNo,x.stationName,x.region,x.category,x.itemText,pick(ST,x.status),pick(SV,x.severity),x.note,x.ageDays,x.createdBy
   ];}));
 
   [s1,s2,s3].forEach(function(sh){sh.setFrozenRows(1);sh.autoResizeColumns(1,sh.getLastColumn());});

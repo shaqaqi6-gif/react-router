@@ -340,8 +340,17 @@ function visitGateForRows_(computerNo, stationNo, visitRows, unlockRows){
     if(!monthly.blockedReason)monthly.blockedReason='الشهرية غير مستحقة الآن'+(monthly.opensOn?(' — تُستحق في '+monthly.opensOn):'')+'.';
   }
 
+  // V9.5: آخر زيارة مقبولة لكل نوع — تظهر للمشرف تحت بطاقة النوع
+  const lastVisit={DAILY:'',BIWEEKLY:'',MONTHLY:''};
+  (visitRows||[]).forEach(function(v){
+    if(String(v.COMPUTER_NO||'')!==String(computerNo)||String(v.STATION_NO||'')!==String(stationNo))return;
+    if(String(v.APPROVAL_STATUS||'')==='REJECTED')return;
+    const t=String(v.VISIT_TYPE||''),d=dateKeyFromValue_(v.DATE);
+    if(lastVisit.hasOwnProperty(t)&&d&&d>lastVisit[t])lastVisit[t]=d;
+  });
   return {
     anchorDate:anchor,
+    lastVisit:lastVisit,
     allowedVisitTypes:allowed,
     requiredVisitType:required,
     requiredVisitLabel:label,

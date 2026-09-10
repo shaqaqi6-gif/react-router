@@ -4,7 +4,7 @@
    ===================================================================== */
 
 const APP = Object.freeze({
-  VERSION: '9.4.0',
+  VERSION: '9.5.0',
   NAME: 'منصة الرقابة والزيارات الميدانية',
   COMPANY: 'شركة الدريس للخدمات البترولية والنقليات',
   DB_PROP: 'ALDREES_CHECKLIST_DB_ID',
@@ -32,7 +32,8 @@ const APP = Object.freeze({
     TICKET_MESSAGES: 'TICKET_MESSAGES',
     STATION_ASSIGNMENTS: 'STATION_ASSIGNMENTS',
     VISIT_UNLOCKS: 'VISIT_UNLOCKS',
-    VISIT_REQUESTS: 'VISIT_REQUESTS'
+    VISIT_REQUESTS: 'VISIT_REQUESTS',
+    TRANSLATIONS: 'TRANSLATIONS'
   },
   VISIT_TYPES: {
     DAILY: 'يومية',
@@ -126,6 +127,7 @@ const HEADERS = Object.freeze({
      CYCLE_KEY يحمل دورة الفتح (مثل MONTHLY|3) فينتهي مفعوله تلقائيًا ببداية الدورة التالية. */
   VISIT_UNLOCKS: ['UNLOCK_ID','COMPUTER_NO','STATION_NO','VISIT_TYPE','CYCLE_KEY','ANCHOR_DATE','CYCLE_START','CYCLE_END','REASON','ACTIVE','CREATED_AT','CREATED_BY','REVOKED_AT','REVOKED_BY','CONSUMED_AT','CONSUMED_BY_VISIT_ID'],
   /* V9: طلب زيارة من مدير العمليات → مساعد الإشراف → المشرف */
+  TRANSLATIONS: ['AR','EN','UR','NOTE'],
   VISIT_REQUESTS: ['REQUEST_ID','STATION_NO','STATION_NAME','VISIT_TYPE','NOTE','DUE_DATE','STATUS','REQUESTED_BY','REQUESTED_AT','SUPERVISOR_COMPUTER_NO','ASSISTANT_COMPUTER_NO','ASSIGNED_AT','ASSIGNED_BY','DONE_VISIT_ID','DONE_AT','CANCELED_AT','CANCELED_BY','UPDATED_AT']
 });
 
@@ -139,7 +141,8 @@ const EXPECTED_FUNCTIONS_ = Object.freeze({
   'Workflow.gs':['runWorkflowMonitor','installWorkflowTrigger','resolveApproverForSupervisor_','updatePlanAfterVisit_','nextDueFromAnchor_','getVisitGate','assertVisitTypeAllowed_','satisfyLowerPriorityPlans_','visitAnchorDate_','visitCycleInfo_','visitGateForRows_','markVisitUnlockUsed_','escalateIssues_','alertLateDailyVisits_','canActOnIssue_'],
   'Admin.gs':['getAdminDashboard','adminBootstrap','adminListUsers','adminSaveUser','adminListRoles','adminSaveRole','adminSearchStations','adminSaveStation','adminListChecklist','adminSaveChecklistItem','exportDashboardReport','adminImportUsers','seedSettings_','seedRoles_','seedRolePermissions_','roleDefaults_','isFixedRole_'],
   'Supervisors.gs':['getStationAssignmentPanel','assignStationsToSupervisor','getOrgStructure','setUserParent','getSupervisors','getSupervisorDetail'],
-  'Support.gs':['getTicketMeta','createTicket','listMyTickets','getTicket','replyTicket','adminListTickets','adminUpdateTicket']
+  'Support.gs':['getTicketMeta','createTicket','listMyTickets','getTicket','replyTicket','adminListTickets','adminUpdateTicket'],
+  'Lang.gs':['getTranslations','importTranslations','ensureTranslationsSheet_','xl_']
 });
 function getServerHealth(token) {
   requireSession_(token);
@@ -236,6 +239,7 @@ function setupOrUpgradeV4_() {
   ensureSheet_(ss, APP.SHEETS.STATION_ASSIGNMENTS, HEADERS.STATION_ASSIGNMENTS);
   ensureSheet_(ss, APP.SHEETS.VISIT_UNLOCKS, HEADERS.VISIT_UNLOCKS);
   ensureSheet_(ss, APP.SHEETS.VISIT_REQUESTS, HEADERS.VISIT_REQUESTS);
+  if (typeof ensureTranslationsSheet_ === 'function') ensureTranslationsSheet_(ss);
 
   seedSettings_(ss);
   seedRoles_(ss);
