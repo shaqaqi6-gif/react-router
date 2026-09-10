@@ -311,8 +311,6 @@ function getApprovalQueue(token,filters){
     o.approverName=nameOf(v.APPROVER_COMPUTER_NO);
     o.approvalDueAt=formatDateTimeSafe_(v.APPROVAL_DUE_AT);
     o.waitHours=Math.max(0,Math.round((new Date()-(asDate_(v.SUBMITTED_AT)||asDate_(v.COMPLETED_AT)||new Date()))/3600000));
-    o.gpsStatus=String(v.GPS_MATCH_STATUS||'');
-    if(canViewVisitGpsDetails_(session))o.gpsDistanceMeters=v.GPS_DISTANCE_M===''?'':Number(v.GPS_DISTANCE_M);
     o.canApprove=canApprove;
     o.isMine=mine;
     o.blockReason=blockReason;
@@ -344,7 +342,7 @@ function approveVisit(token,visitId,approved,comment){
   const now=new Date(), vsh=getDb_().getSheetByName(APP.SHEETS.VISITS), ish=getDb_().getSheetByName(APP.SHEETS.ISSUES), issues=sheetObjects_(ish).filter(function(x){return String(x.VISIT_ID||'')===visitId;});
   if(approved){
     updateRowsByKeys_(vsh,{VISIT_ID:visitId},{APPROVAL_STATUS:'APPROVED',APPROVED_BY:session.computerNo,APPROVED_AT:now,APPROVAL_COMMENT:comment,WORKFLOW_STATUS:issues.length?'FOLLOW_UP':'CLOSED'});
-    issues.forEach(function(x){const days=Math.max(1,Number(x.DUE_DAYS||settingValue_('ISSUE_DEFAULT_REMEDIATION_DAYS','7'))),due=dateAddDaysKey_(dateKey_(now),days);updateRowsByKeys_(ish,{ISSUE_ID:String(x.ISSUE_ID||'')},{STATUS:'OPEN',APPROVED_AT:now,DUE_DATE:due,DUE_DAYS:days,LAST_UPDATED_AT:now});});
+    issues.forEach(function(x){const days=Math.max(1,Number(x.DUE_DAYS||settingValue_('ISSUE_DEFAULT_REMEDIATION_DAYS','7'))),due=dateAddDaysKey_(dateKey_(now),days);const patch={APPROVED_AT:now,DUE_DATE:due,DUE_DAYS:days,LAST_UPDATED_AT:now};/* V9.2: لا نعيد فتح ملاحظة عالجها المشرف قبل الاعتماد */if(String(x.STATUS||'')==='PENDING_APPROVAL')patch.STATUS='OPEN';updateRowsByKeys_(ish,{ISSUE_ID:String(x.ISSUE_ID||'')},patch);});
     notify_(String(v.COMPUTER_NO||''),'VISIT_APPROVED','تم اعتماد الزيارة','تم اعتماد زيارتك '+visitId+' للمحطة '+String(v.STATION_NAME||v.STATION_NO||'')+'.',visitId,session.computerNo);
     // V8.3: الملاحظات الجديدة إشعار مستقل — لا تضيع داخل إشعار الاعتماد.
     if(issues.length){
@@ -379,8 +377,9 @@ function adminListVisits(token,filters){
   }).sort(function(a,b){return sortKeyFromValue_(b.COMPLETED_AT).localeCompare(sortKeyFromValue_(a.COMPLETED_AT));}).slice(0,500).map(function(v){return visitListObjectForSession_(v,session);});
 }
 
+/* V9.2: كل من فوق المشرف يرى تفاصيل الموقع (المساعد هو من يعتمد)؛ المشرف وحده لا يراها. */
 function canViewVisitGpsDetails_(session){
-  return !!session && (session.roleId==='SYSTEM_ADMIN' || session.roleId==='OPERATIONS_MANAGER');
+  return !!session && session.roleId!=='SUPERVISOR';
 }
 function visitListObjectForSession_(v,session){
   const o=visitListObject_(v);
@@ -397,7 +396,7 @@ function visitGpsSnapshot_(v){
   let status=String(v.GPS_MATCH_STATUS||'');
   const station=findStation_(String(v.STATION_NO||''));
   if(lat===''||lng===''||!isFinite(lat)||!isFinite(lng)){
-    return {lat:'',lng:'',accuracy:accuracy,distance:'',status:'NOT_RECORDED',stationLat:station&&station.lat!==''?Number(station.lat):'',stationLng:station&&station.lng!==''?Number(station.lng):''};
+    return {lat:'',lng:'',accuracy:accuracy,distance:'',status:'NOT_RECORDED',stationLat:station&&station.lat!==''?Number(station.lat):'',stationLng:station&&station.lng!==''?Number(station.lng):'',stationGoogleMaps:station?String(station.googleMaps||''):''};
   }
   if(station&&station.lat!==''&&station.lng!==''){
     if(distance===''||!isFinite(distance))distance=Math.round(gpsDistance_(lat,lng,Number(station.lat),Number(station.lng)));
@@ -411,7 +410,7 @@ function visitGpsSnapshot_(v){
   }else if(!status){
     status='NO_STATION_COORDINATES';
   }
-  return {lat:lat,lng:lng,accuracy:accuracy,distance:distance,status:status||'NOT_RECORDED',stationLat:station&&station.lat!==''?Number(station.lat):'',stationLng:station&&station.lng!==''?Number(station.lng):''};
+  return {lat:lat,lng:lng,accuracy:accuracy,distance:distance,status:status||'NOT_RECORDED',stationLat:station&&station.lat!==''?Number(station.lat):'',stationLng:station&&station.lng!==''?Number(station.lng):'',stationGoogleMaps:station?String(station.googleMaps||''):''};
 }
 
 function visitListObject_(v){
@@ -433,7 +432,7 @@ function getVisitDetail(token,visitId){
   let previous=null;if(prevCandidates.length){const pv=prevCandidates[0],pdet=allDetails.filter(function(d){return String(d.VISIT_ID||'')===String(pv.VISIT_ID||'');}),pf={};pdet.filter(function(d){return String(d.RESULT||'')==='FAIL';}).forEach(function(d){pf[String(d.ITEM_ID||'')]=true;});const curFail=details.filter(function(d){return String(d.RESULT||'')==='FAIL';}).map(function(d){return String(d.ITEM_ID||'');});previous={visitId:String(pv.VISIT_ID||''),date:dateKeyFromValue_(pv.DATE),supervisor:String(pv.SUPERVISOR_NAME||''),score:Number(pv.SCORE||0),repeatedFailIds:curFail.filter(function(id){return pf[id];}),newFailCount:curFail.filter(function(id){return !pf[id];}).length,fixedCount:Object.keys(pf).filter(function(id){return curFail.indexOf(id)===-1;}).length};}
   const history=allVisits.filter(function(x){if(String(x.STATION_NO||'')!==String(v.STATION_NO||''))return false;if(session.roleId==='SUPERVISOR'&&String(x.COMPUTER_NO||'')!==session.computerNo)return false;return true;}).sort(function(a,b){return sortKeyFromValue_(b.COMPLETED_AT).localeCompare(sortKeyFromValue_(a.COMPLETED_AT));}).slice(0,10).map(function(x){return visitListObjectForSession_(x,session);});
   const gps=visitGpsSnapshot_(v), canViewGpsDetails=canViewVisitGpsDetails_(session);
-  return {visitId:visitId,date:dateKeyFromValue_(v.DATE),startedAt:formatDateTimeSafe_(v.STARTED_AT),completedAt:formatDateTimeSafe_(v.COMPLETED_AT),computerNo:String(v.COMPUTER_NO||''),supervisor:String(v.SUPERVISOR_NAME||''),stationNo:String(v.STATION_NO||''),stationName:String(v.STATION_NAME||''),region:String(v.REGION||''),city:String(v.CITY||''),branch:String(v.BRANCH||''),visitType:String(v.VISIT_TYPE||''),visitTypeLabel:APP.VISIT_TYPES[String(v.VISIT_TYPE||'')]||String(v.VISIT_TYPE||''),score:Number(v.SCORE||0),passCount:Number(v.PASS_COUNT||0),failCount:Number(v.FAIL_COUNT||0),durationMinutes:Number(v.DURATION_MINUTES||0),approvalStatus:String(v.APPROVAL_STATUS||'PENDING'),approvedBy:String(v.APPROVED_BY||''),approvedAt:formatDateTimeSafe_(v.APPROVED_AT),approvalComment:String(v.APPROVAL_COMMENT||''),approverComputerNo:String(v.APPROVER_COMPUTER_NO||''),workflowStatus:String(v.WORKFLOW_STATUS||''),canViewGpsDetails:canViewGpsDetails,gpsLat:canViewGpsDetails?gps.lat:'',gpsLng:canViewGpsDetails?gps.lng:'',gpsAccuracy:canViewGpsDetails?gps.accuracy:'',gpsDistanceMeters:canViewGpsDetails?gps.distance:'',gpsMatchStatus:gps.status,gpsOverrideReason:canViewGpsDetails?String(v.GPS_OVERRIDE_REASON||''):'',stationLat:canViewGpsDetails?gps.stationLat:'',stationLng:canViewGpsDetails?gps.stationLng:'',canApprove:canApproveVisit_(session,v),previous:previous,stationHistory:history,items:details.map(function(d){const x=im[String(d.ITEM_ID||'')]||{};return{itemId:String(d.ITEM_ID||''),category:String(d.CATEGORY||''),text:String(d.ITEM_TEXT||''),result:String(d.RESULT||''),note:String(d.NOTE||''),severity:String(d.SEVERITY||''),photoUrl:String(d.PHOTO_URL||''),photoFileId:driveFileId_(d.PHOTO_URL),issueId:String(x.ISSUE_ID||''),issueStatus:String(x.STATUS||''),issueDue:dateKeyFromValue_(x.DUE_DATE),remediationNote:String(x.REMEDIATION_NOTE||''),remediationPhotoUrl:String(x.REMEDIATION_PHOTO_URL||'')};})};
+  return {visitId:visitId,date:dateKeyFromValue_(v.DATE),startedAt:formatDateTimeSafe_(v.STARTED_AT),completedAt:formatDateTimeSafe_(v.COMPLETED_AT),computerNo:String(v.COMPUTER_NO||''),supervisor:String(v.SUPERVISOR_NAME||''),stationNo:String(v.STATION_NO||''),stationName:String(v.STATION_NAME||''),region:String(v.REGION||''),city:String(v.CITY||''),branch:String(v.BRANCH||''),visitType:String(v.VISIT_TYPE||''),visitTypeLabel:APP.VISIT_TYPES[String(v.VISIT_TYPE||'')]||String(v.VISIT_TYPE||''),score:Number(v.SCORE||0),passCount:Number(v.PASS_COUNT||0),failCount:Number(v.FAIL_COUNT||0),durationMinutes:Number(v.DURATION_MINUTES||0),approvalStatus:String(v.APPROVAL_STATUS||'PENDING'),approvedBy:String(v.APPROVED_BY||''),approvedAt:formatDateTimeSafe_(v.APPROVED_AT),approvalComment:String(v.APPROVAL_COMMENT||''),approverComputerNo:String(v.APPROVER_COMPUTER_NO||''),workflowStatus:String(v.WORKFLOW_STATUS||''),canViewGpsDetails:canViewGpsDetails,gpsLat:canViewGpsDetails?gps.lat:'',gpsLng:canViewGpsDetails?gps.lng:'',gpsAccuracy:canViewGpsDetails?gps.accuracy:'',gpsDistanceMeters:canViewGpsDetails?gps.distance:'',gpsMatchStatus:gps.status,gpsOverrideReason:canViewGpsDetails?String(v.GPS_OVERRIDE_REASON||''):'',stationLat:canViewGpsDetails?gps.stationLat:'',stationLng:canViewGpsDetails?gps.stationLng:'',stationGoogleMaps:canViewGpsDetails?gps.stationGoogleMaps:'',canApprove:canApproveVisit_(session,v),previous:previous,stationHistory:history,items:details.map(function(d){const x=im[String(d.ITEM_ID||'')]||{};return{itemId:String(d.ITEM_ID||''),category:String(d.CATEGORY||''),text:String(d.ITEM_TEXT||''),result:String(d.RESULT||''),note:String(d.NOTE||''),severity:String(d.SEVERITY||''),photoUrl:String(d.PHOTO_URL||''),photoFileId:driveFileId_(d.PHOTO_URL),issueId:String(x.ISSUE_ID||''),issueStatus:String(x.STATUS||''),issueDue:dateKeyFromValue_(x.DUE_DATE),remediationNote:String(x.REMEDIATION_NOTE||''),remediationPhotoUrl:String(x.REMEDIATION_PHOTO_URL||'')};})};
 }
 
 function driveFileId_(url){const s=String(url||'');const m=s.match(/[-\w]{20,}/);return m?m[0]:'';}
@@ -540,7 +539,8 @@ function getMyIssues(token,filters){const s=requireSession_(token);filters=filte
   if(!hasPermission_(s,'ISSUE_MANAGE'))return false;
   if(!issueAllowed_(s,x))return false;
 }if(filters.status&&String(x.STATUS||'')!==filters.status)return false;return true;}).sort(issueSort_).map(issueObject_);}
-function issueObject_(x){const due=dateKeyFromValue_(x.DUE_DATE),today=dateKey_(new Date());return{issueId:String(x.ISSUE_ID||''),visitId:String(x.VISIT_ID||''),itemId:String(x.ITEM_ID||''),category:String(x.CATEGORY||''),itemText:String(x.ITEM_TEXT||''),stationNo:String(x.STATION_NO||''),stationName:String(x.STATION_NAME||''),region:String(x.REGION||''),createdAt:formatDateTimeSafe_(x.CREATED_AT),createdBy:String(x.CREATED_BY||''),ownerComputerNo:String(x.OWNER_COMPUTER_NO||''),status:String(x.STATUS||''),severity:String(x.SEVERITY||''),note:String(x.NOTE||''),photoUrl:String(x.PHOTO_URL||''),dueDate:due,ageDays:ageDays_(x.CREATED_AT),overdue:!!due&&due<today&&['CLOSED','CANCELED','AWAITING_VERIFICATION'].indexOf(String(x.STATUS||''))===-1,remediationSubmittedAt:formatDateTimeSafe_(x.REMEDIATION_SUBMITTED_AT),remediationNote:String(x.REMEDIATION_NOTE||''),remediationPhotoUrl:String(x.REMEDIATION_PHOTO_URL||''),returnReason:String(x.RETURN_REASON||''),
+const ISSUE_RESOLVABLE_=Object.freeze(['PENDING_APPROVAL','OPEN','IN_PROGRESS','OVERDUE','RETURNED','RESOLVED']);
+function issueObject_(x){const due=dateKeyFromValue_(x.DUE_DATE),today=dateKey_(new Date());return{canResolve:ISSUE_RESOLVABLE_.indexOf(String(x.STATUS||''))!==-1,issueId:String(x.ISSUE_ID||''),visitId:String(x.VISIT_ID||''),itemId:String(x.ITEM_ID||''),category:String(x.CATEGORY||''),itemText:String(x.ITEM_TEXT||''),stationNo:String(x.STATION_NO||''),stationName:String(x.STATION_NAME||''),region:String(x.REGION||''),createdAt:formatDateTimeSafe_(x.CREATED_AT),createdBy:String(x.CREATED_BY||''),ownerComputerNo:String(x.OWNER_COMPUTER_NO||''),status:String(x.STATUS||''),severity:String(x.SEVERITY||''),note:String(x.NOTE||''),photoUrl:String(x.PHOTO_URL||''),dueDate:due,ageDays:ageDays_(x.CREATED_AT),overdue:!!due&&due<today&&['CLOSED','CANCELED','AWAITING_VERIFICATION'].indexOf(String(x.STATUS||''))===-1,remediationSubmittedAt:formatDateTimeSafe_(x.REMEDIATION_SUBMITTED_AT),remediationNote:String(x.REMEDIATION_NOTE||''),remediationPhotoUrl:String(x.REMEDIATION_PHOTO_URL||''),returnReason:String(x.RETURN_REASON||''),
   urgent:String(x.PRIORITY||'').toUpperCase()==='URGENT',priorityBy:String(x.PRIORITY_BY||''),
   escalationLevel:Number(x.ESCALATION_LEVEL||0),escalatedTo:String(x.ESCALATED_TO||''),escalatedAt:formatDateTimeSafe_(x.ESCALATED_AT),
   escalationLabel:({1:'مسؤول الإشراف',2:'مسؤول تشغيل المنطقة',3:'مدير العمليات'})[Number(x.ESCALATION_LEVEL||0)]||''};}
@@ -580,7 +580,30 @@ function getIssueContext(token,issueId){
   };
 }
 
-function submitIssueResolution(token,issueId,payload){const s=requireSession_(token);payload=payload||{};const ish=getDb_().getSheetByName(APP.SHEETS.ISSUES), rows=sheetObjects_(ish),x=rows.filter(function(r){return String(r.ISSUE_ID||'')===String(issueId);})[0];if(!x)throw new Error('الملاحظة غير موجودة.');const own=String(x.OWNER_COMPUTER_NO||x.CREATED_BY||'')===s.computerNo;if(!own&&!hasPermission_(s,'ISSUE_MANAGE'))throw new Error('هذه الملاحظة ليست ضمن مسؤوليتك.');if(['OPEN','IN_PROGRESS','OVERDUE','RETURNED'].indexOf(String(x.STATUS||''))===-1)throw new Error('الملاحظة ليست في حالة تسمح بإرسال معالجة.');const note=limitText_(normalizeText_(payload.note),2000);if(!note)throw new Error('اكتب ما تم عمله لمعالجة الملاحظة.');let photo='';if(payload.photoData){photo=saveIssueResolutionPhoto_(issueId,payload.photoData,payload.fileName||'resolution.jpg');}const now=new Date();updateRowsByKeys_(ish,{ISSUE_ID:issueId},{STATUS:'AWAITING_VERIFICATION',REMEDIATION_SUBMITTED_AT:now,REMEDIATION_NOTE:note,REMEDIATION_PHOTO_URL:photo,LAST_UPDATED_AT:now,RETURN_REASON:''});appendObject_(getDb_().getSheetByName(APP.SHEETS.ISSUE_UPDATES),{UPDATE_ID:'UPD-'+Utilities.getUuid(),ISSUE_ID:issueId,TIMESTAMP:now,COMPUTER_NO:s.computerNo,ACTION:'RESOLUTION_SUBMITTED',COMMENT:note,PHOTO_URL:photo,STATUS_FROM:String(x.STATUS||''),STATUS_TO:'AWAITING_VERIFICATION'});const v=findVisitObjectById_(String(x.VISIT_ID||'')),ap=v?String(v.APPROVER_COMPUTER_NO||''):resolveApproverForSupervisor_(s.computerNo,findStation_(x.STATION_NO));if(ap)notify_(ap,'ISSUE_AWAITING_VERIFICATION','معالجة ملاحظة بانتظار التحقق','المشرف '+s.name+' أرسل معالجة للملاحظة '+issueId+' في '+String(x.STATION_NAME||x.STATION_NO||'')+'.',issueId,s.computerNo);refreshVisitWorkflow_(String(x.VISIT_ID||''));return{ok:true,status:'AWAITING_VERIFICATION'};}
+function submitIssueResolution(token,issueId,payload){const s=requireSession_(token);payload=payload||{};issueId=limitText_(normalizeText_(issueId),80);
+  const note=limitText_(normalizeText_(payload.note),2000);if(!note)throw new Error('اكتب ما تم عمله لمعالجة الملاحظة.');
+  /* V9.2: تُقبل المعالجة في كل الحالات المفتوحة بما فيها «بانتظار اعتماد الزيارة» — المشرف يصلح فورًا ولا ينتظر.
+     الصورة السابقة تبقى إن لم تُرسل جديدة، والقراءة والكتابة تحت قفل. */
+  return withDbLock_(function(){
+    const ish=getDb_().getSheetByName(APP.SHEETS.ISSUES), x=sheetObjects_(ish).filter(function(r){return String(r.ISSUE_ID||'')===issueId;})[0];
+    if(!x)throw new Error('الملاحظة غير موجودة.');
+    const own=String(x.OWNER_COMPUTER_NO||x.CREATED_BY||'')===s.computerNo;
+    if(!own&&!hasPermission_(s,'ISSUE_MANAGE'))throw new Error('هذه الملاحظة ليست ضمن مسؤوليتك.');
+    const st=String(x.STATUS||'');
+    if(ISSUE_RESOLVABLE_.indexOf(st)===-1)throw new Error(st==='AWAITING_VERIFICATION'?'المعالجة مرسلة وبانتظار تحقق المساعد.':(st==='CLOSED'?'الملاحظة مغلقة.':'الملاحظة ليست في حالة تسمح بإرسال معالجة.'));
+    let photo='';if(payload.photoData){photo=saveIssueResolutionPhoto_(issueId,payload.photoData,payload.fileName||'resolution.jpg');}
+    const now=new Date(),patch={STATUS:'AWAITING_VERIFICATION',REMEDIATION_SUBMITTED_AT:now,REMEDIATION_NOTE:note,LAST_UPDATED_AT:now,RETURN_REASON:''};
+    if(photo)patch.REMEDIATION_PHOTO_URL=photo;
+    updateRowsByKeys_(ish,{ISSUE_ID:issueId},patch);
+    appendObject_(getDb_().getSheetByName(APP.SHEETS.ISSUE_UPDATES),{UPDATE_ID:'UPD-'+Utilities.getUuid(),ISSUE_ID:issueId,TIMESTAMP:now,COMPUTER_NO:s.computerNo,ACTION:'RESOLUTION_SUBMITTED',COMMENT:note,PHOTO_URL:photo||String(x.REMEDIATION_PHOTO_URL||''),STATUS_FROM:st,STATUS_TO:'AWAITING_VERIFICATION'});
+    const owner=String(x.OWNER_COMPUTER_NO||x.CREATED_BY||''),v=findVisitObjectById_(String(x.VISIT_ID||''));
+    let ap=v?String(v.APPROVER_COMPUTER_NO||''):'';
+    if(!ap)ap=assistantOf_(owner)||resolveApproverForSupervisor_(owner,findStation_(x.STATION_NO));
+    if(ap&&ap!==s.computerNo)notify_(ap,'ISSUE_AWAITING_VERIFICATION','معالجة ملاحظة بانتظار التحقق','المشرف '+s.name+' أرسل معالجة للملاحظة «'+String(x.ITEM_TEXT||issueId)+'» في '+String(x.STATION_NAME||x.STATION_NO||'')+'.',issueId,s.computerNo);
+    if(st!=='PENDING_APPROVAL')refreshVisitWorkflow_(String(x.VISIT_ID||''));
+    return{ok:true,status:'AWAITING_VERIFICATION'};
+  },15000);
+}
 function saveIssueResolutionPhoto_(issueId,dataUrl,fileName){
   const img=decodeEvidenceImage_(dataUrl);
   const root=ensureEvidenceFolder_(),folder=getOrCreateChildFolder_(root,'Issue-Resolutions');

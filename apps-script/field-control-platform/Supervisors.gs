@@ -165,3 +165,58 @@ function assignStationsToSupervisor(token,supervisorComputerNo,stationNos,assist
     return {ok:true,stations:wanted,added:added,removed:removed,moved:moved,assistantComputerNo:asst};
   }finally{lock.releaseLock();}
 }
+
+/* =========================================================
+   V9.2: الهيكل الإداري — شجرة واضحة بلا تخمين
+   مدير النظام (ومدير العمليات) يرى كل المستخدمين في مستوياتهم، ويحدد
+   «مَن فوق مَن» من قائمة منسدلة، ويرى التحذيرات: مشرف بلا مساعد، مساعد
+   بلا مسؤول، مشرف بلا محطات… المشرف يُربط بمساعده تلقائيًا عند إسناد
+   المحطات، فلا يحتاج ضبطًا يدويًا.
+   ========================================================= */
+const ORG_ROLES_=Object.freeze(['OPERATIONS_MANAGER','OPERATIONS_DEPUTY','REGION_MANAGER','SUPERVISION_MANAGER','APPROVAL_ASSISTANT','SUPERVISOR']);
+const ORG_PARENT_ROLE_=Object.freeze({SUPERVISOR:['APPROVAL_ASSISTANT'],APPROVAL_ASSISTANT:['SUPERVISION_MANAGER','REGION_MANAGER','OPERATIONS_MANAGER'],SUPERVISION_MANAGER:['REGION_MANAGER','OPERATIONS_MANAGER'],REGION_MANAGER:['OPERATIONS_MANAGER','OPERATIONS_DEPUTY'],OPERATIONS_DEPUTY:['OPERATIONS_MANAGER'],OPERATIONS_MANAGER:[]});
+function requireOrgEditor_(s){if(['SYSTEM_ADMIN','OPERATIONS_MANAGER'].indexOf(s.roleId)===-1)throw new Error('الهيكل الإداري لمدير النظام ومدير العمليات فقط.');}
+function getOrgStructure(token){
+  const s=requireSession_(token);requireOrgEditor_(s);
+  const users=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(u){return toBool_(u.ACTIVE);});
+  const byNo={};users.forEach(function(u){byNo[String(u.COMPUTER_NO||'')]=u;});
+  const nodes=users.map(function(u){
+    const rid=normalizeRoleId_(u.ROLE_ID||u.ROLE||''),no=String(u.COMPUTER_NO||''),parent=parentOfUser_(u),pu=byNo[parent];
+    return{computerNo:no,name:String(u.NAME||''),roleId:rid,roleName:getRoleName_(rid),parent:parent,parentName:pu?String(pu.NAME||''):'',
+      parentRole:pu?normalizeRoleId_(pu.ROLE_ID||pu.ROLE||''):'',stationCount:rid==='SUPERVISOR'?csvArray_(u.STATION_NOS).length:0,phone:String(u.PHONE||'')};
+  });
+  const warnings=[];
+  nodes.forEach(function(n){
+    if(n.roleId==='SYSTEM_ADMIN')return;
+    const want=ORG_PARENT_ROLE_[n.roleId];
+    if(!want)return;
+    if(want.length&&!n.parent)warnings.push({computerNo:n.computerNo,name:n.name,roleId:n.roleId,kind:'NO_PARENT',text:(n.roleId==='SUPERVISOR'?'مشرف بلا مساعد إشراف — أسند له محطات من صفحة «إسناد المحطات» وسيُربط تلقائيًا':'بلا رئيس مباشر — اختر من فوقه من القائمة')});
+    else if(n.parent&&!byNo[n.parent])warnings.push({computerNo:n.computerNo,name:n.name,roleId:n.roleId,kind:'PARENT_MISSING',text:'الرئيس المحدد ('+n.parent+') غير موجود أو غير نشط'});
+    else if(n.parent&&want.indexOf(n.parentRole)===-1)warnings.push({computerNo:n.computerNo,name:n.name,roleId:n.roleId,kind:'PARENT_ROLE',text:'الرئيس المحدد دوره «'+getRoleName_(n.parentRole)+'» وليس من المستويات المتوقعة'});
+    if(n.roleId==='SUPERVISOR'&&!n.stationCount)warnings.push({computerNo:n.computerNo,name:n.name,roleId:n.roleId,kind:'NO_STATIONS',text:'مشرف بلا محطات'});
+    if(n.roleId==='APPROVAL_ASSISTANT'&&!nodes.some(function(x){return x.roleId==='SUPERVISOR'&&x.parent===n.computerNo;}))warnings.push({computerNo:n.computerNo,name:n.name,roleId:n.roleId,kind:'NO_TEAM',text:'مساعد إشراف بلا مشرفين'});
+  });
+  const counts={};ORG_ROLES_.forEach(function(r){counts[r]=nodes.filter(function(n){return n.roleId===r;}).length;});
+  return {me:{computerNo:s.computerNo,roleId:s.roleId},nodes:nodes,warnings:warnings,counts:counts,roles:ORG_ROLES_.map(function(r){return{roleId:r,name:getRoleName_(r)};}),parentRoles:ORG_PARENT_ROLE_};
+}
+function setUserParent(token,computerNo,parentComputerNo){
+  const s=requireSession_(token);requireOrgEditor_(s);
+  computerNo=limitText_(normalizeText_(computerNo),32);parentComputerNo=limitText_(normalizeText_(parentComputerNo),32);
+  const u=findUserByComputerNo_(computerNo);if(!u||!toBool_(u.ACTIVE))throw new Error('المستخدم غير موجود أو غير نشط.');
+  const rid=normalizeRoleId_(u.ROLE_ID||u.ROLE||'');
+  if(rid==='SYSTEM_ADMIN')throw new Error('مدير النظام لا يُربط بأحد.');
+  if(computerNo===parentComputerNo)throw new Error('لا يمكن ربط المستخدم بنفسه.');
+  if(parentComputerNo){
+    const p=findUserByComputerNo_(parentComputerNo);if(!p||!toBool_(p.ACTIVE))throw new Error('الرئيس المحدد غير موجود أو غير نشط.');
+    const prid=normalizeRoleId_(p.ROLE_ID||p.ROLE||'');
+    if((ORG_PARENT_ROLE_[rid]||[]).indexOf(prid)===-1)throw new Error('لا يمكن ربط «'+getRoleName_(rid)+'» بـ«'+getRoleName_(prid)+'».');
+    // منع الحلقات: الرئيس لا يكون من تحت هذا المستخدم
+    let cur=parentComputerNo,guard=0;while(cur&&guard++<20){if(cur===computerNo)throw new Error('هذا الربط يُنشئ حلقة في الهيكل.');const cu=findUserByComputerNo_(cur);cur=cu?parentOfUser_(cu):'';}
+  }
+  const sh=getDb_().getSheetByName(APP.SHEETS.USERS),now=new Date();
+  const patch=rid==='SUPERVISOR'?{APPROVER_COMPUTER_NO:parentComputerNo,UPDATED_AT:now}:{MANAGER_COMPUTER_NO:parentComputerNo,UPDATED_AT:now};
+  updateRowsByKeys_(sh,{COMPUTER_NO:computerNo},patch);
+  invalidateSheet_(APP.SHEETS.USERS);Object.keys(MEMO_).forEach(function(k){if(k.indexOf('TEAM_')===0)delete MEMO_[k];});
+  audit_(s.computerNo,'ORG_SET_PARENT',computerNo,'parent='+parentComputerNo);
+  return {ok:true};
+}

@@ -4,7 +4,7 @@
    ===================================================================== */
 
 const APP = Object.freeze({
-  VERSION: '9.1.0',
+  VERSION: '9.2.0',
   NAME: 'منصة الرقابة والزيارات الميدانية',
   COMPANY: 'شركة الدريس للخدمات البترولية والنقليات',
   DB_PROP: 'ALDREES_CHECKLIST_DB_ID',
@@ -138,7 +138,7 @@ const EXPECTED_FUNCTIONS_ = Object.freeze({
   'Visits.gs':['getDashboard','searchStations','getStation','getChecklist','saveVisit','getMyVisits','getVisitDetail','adminListVisits','approveVisit','getApprovalQueue','getMySchedule','getMyIssues','submitIssueResolution','verifyIssueResolution','adminListIssues','adminListVisitPlans','adminSaveVisitPlan','calculatePlanMetrics_','adminUnlockVisitType','adminRevokeVisitUnlock','adminListVisitUnlocks','listApproverCandidates','adminReassignApprover','sessionForUser_','getBadgeCounts','markAllNotificationsRead','setIssuePriority','getStationIssueLog','createVisitRequest','listVisitRequests','reassignVisitRequest','cancelVisitRequest','getMyTeam'],
   'Workflow.gs':['runWorkflowMonitor','installWorkflowTrigger','resolveApproverForSupervisor_','updatePlanAfterVisit_','nextDueFromAnchor_','getVisitGate','assertVisitTypeAllowed_','satisfyLowerPriorityPlans_','visitAnchorDate_','visitCycleInfo_','visitGateForRows_','markVisitUnlockUsed_','escalateIssues_','alertLateDailyVisits_','canActOnIssue_'],
   'Admin.gs':['getAdminDashboard','adminBootstrap','adminListUsers','adminSaveUser','adminListRoles','adminSaveRole','adminListChecklist','adminSaveChecklistItem','getStationAssignmentMeta','listStationAssignments','requestStationAssignment','requestStationAssignments','decideStationAssignment','decideStationAssignments'],
-  'Supervisors.gs':['getStationAssignmentPanel','assignStationsToSupervisor','getSupervisors','getSupervisorDetail'],
+  'Supervisors.gs':['getStationAssignmentPanel','assignStationsToSupervisor','getOrgStructure','setUserParent','getSupervisors','getSupervisorDetail'],
   'Support.gs':['getTicketMeta','createTicket','listMyTickets','getTicket','replyTicket','adminListTickets','adminUpdateTicket']
 });
 function getServerHealth(token) {
@@ -248,6 +248,7 @@ function setupOrUpgradeV4_() {
   if (typeof migrateWorkflowData_ === 'function') migrateWorkflowData_();
   if (typeof migrateSupervisorStationScope_ === 'function') migrateSupervisorStationScope_();
   renameSupervisorRoleV9_(ss);
+  applyRoleMatrixV92_(ss);
   if (typeof ensureWorkflowTrigger_ === 'function') ensureWorkflowTrigger_();
   invalidateAllSheetCache_();
 
@@ -420,6 +421,39 @@ function changePassword(token, currentPassword, newPassword) {
    Permissions + scope helpers
    ========================= */
 
+
+/* =========================================================
+   V9.2: مصفوفة الصلاحيات الثابتة لكل منصب (اقرأها كوصف وظيفي)
+   ========================================================= */
+const ROLE_MATRIX_=Object.freeze({
+  // مشرف المحطات: يرى محطاته، ينفّذ الزيارات، ويعالج ملاحظاته. لا شيء آخر.
+  SUPERVISOR:['VISIT_CREATE','STATION_VIEW','ISSUE_RESOLVE_OWN'],
+  // مساعد الإشراف: يسند المحطات لمشرفيه (بالدور لا بالصلاحية)، يعتمد زياراتهم، يتحقق من معالجة ملاحظاتهم ويغلقها، ويرى لوحة فريقه.
+  APPROVAL_ASSISTANT:['DASHBOARD_VIEW_SCOPE','VISIT_VIEW_SCOPE','VISIT_APPROVE','ISSUE_VIEW_SCOPE','ISSUE_MANAGE','ISSUE_CLOSE','STATION_VIEW','REPORT_EXPORT'],
+  // مسؤول الإشراف: يطّلع على فريقه، ينقل الأولوية، ويتصرف في الملاحظات المصعَّدة إليه. لا يعتمد الزيارات.
+  SUPERVISION_MANAGER:['DASHBOARD_VIEW_SCOPE','VISIT_VIEW_SCOPE','ISSUE_VIEW_SCOPE','ISSUE_CLOSE','STATION_VIEW','REPORT_EXPORT'],
+  // مسؤول تشغيل المنطقة: كالسابق على مستوى المنطقة، ويستقبل التصعيد الثاني.
+  REGION_MANAGER:['DASHBOARD_VIEW_SCOPE','VISIT_VIEW_SCOPE','ISSUE_VIEW_SCOPE','ISSUE_CLOSE','STATION_VIEW','REPORT_EXPORT'],
+  // مدير العمليات ونائبه: يريان الكل، يطلبان الزيارات ويعيدان الإسناد (بالدور)، يديران المحطات والخطط والتذاكر، ويستقبلان التصعيد النهائي. لا يعتمدان الزيارات.
+  OPERATIONS_MANAGER:['DASHBOARD_VIEW_ALL','VISIT_VIEW_ALL','ISSUE_VIEW_ALL','ISSUE_MANAGE','ISSUE_CLOSE','STATION_VIEW','STATION_MANAGE','VISIT_PLAN_MANAGE','REPORT_EXPORT','TICKET_MANAGE'],
+  OPERATIONS_DEPUTY:['DASHBOARD_VIEW_ALL','VISIT_VIEW_ALL','ISSUE_VIEW_ALL','ISSUE_MANAGE','ISSUE_CLOSE','STATION_VIEW','STATION_MANAGE','VISIT_PLAN_MANAGE','REPORT_EXPORT','TICKET_MANAGE']
+});
+/* يكتب المصفوفة نفسها في ورقة ROLE_PERMISSIONS حتى تعرض صفحة الصلاحيات الحقيقة (للاطلاع فقط — المحرك يقرأ المصفوفة). */
+function applyRoleMatrixV92_(ss){
+  try{
+    const sh=ss.getSheetByName(APP.SHEETS.ROLE_PERMISSIONS);if(!sh)return;
+    const now=new Date();
+    Object.keys(ROLE_MATRIX_).forEach(function(rid){
+      PERMISSIONS.forEach(function(p){
+        const allowed=ROLE_MATRIX_[rid].indexOf(p[0])!==-1;
+        const n=updateRowsByKeys_(sh,{ROLE_ID:rid,PERMISSION_KEY:p[0]},{ALLOWED:allowed,UPDATED_AT:now,UPDATED_BY:'SYSTEM'});
+        if(!n)appendObject_(sh,{ROLE_ID:rid,PERMISSION_KEY:p[0],ALLOWED:allowed,UPDATED_AT:now,UPDATED_BY:'SYSTEM'});
+      });
+    });
+    invalidateSheet_(APP.SHEETS.ROLE_PERMISSIONS);
+  }catch(e){}
+}
+
 function getEffectivePermissions_(computerNo,roleId){
   if(roleId==='SYSTEM_ADMIN'){
     const all={};PERMISSIONS.forEach(function(p){all[p[0]]=true;});return all;
@@ -427,12 +461,12 @@ function getEffectivePermissions_(computerNo,roleId){
 
   // V8.1.4.3: مشرف المحطات له صلاحيات ثابتة لا تتأثر بإعدادات الدور أو الاستثناءات.
   // واجهته الميدانية فقط: اختيار محطة معتمدة -> الزيارة المطلوبة (اليومية افتراضياً) -> معالجة ملاحظاته.
-  if(roleId==='SUPERVISOR'){
+  // V9.2: الصلاحيات تُحدَّد من المنصب نفسه — لا تخمين ولا مفاتيح. المناصب الستة ثابتة،
+  // ولا تتأثر بورقة ROLE_PERMISSIONS ولا بالاستثناءات. الأدوار المخصصة فقط تقرأ من الورقة.
+  if(ROLE_MATRIX_[roleId]){
     const fixed={};
     PERMISSIONS.forEach(function(p){fixed[p[0]]=false;});
-    fixed.VISIT_CREATE=true;
-    fixed.STATION_VIEW=true;
-    fixed.ISSUE_RESOLVE_OWN=true;
+    ROLE_MATRIX_[roleId].forEach(function(k){fixed[k]=true;});
     return fixed;
   }
 
@@ -468,7 +502,13 @@ function normalizeRoleId_(value){
   value=normalizeText_(value).toUpperCase();
   if(value==='ADMIN')return 'SYSTEM_ADMIN';
   if(!value)return 'SUPERVISOR';
-  return value.replace(/\s+/g,'_');
+  value=value.replace(/\s+/g,'_');
+  // V9.2: أسماء بديلة شائعة تُطابَق إلى المناصب الستة حتى لا يتعطل مستخدم بسبب معرّف دور مختلف
+  const alias={STATION_SUPERVISOR:'SUPERVISOR',FIELD_SUPERVISOR:'SUPERVISOR','مشرف':'SUPERVISOR','مشرف_المحطات':'SUPERVISOR','مشرف_محطات':'SUPERVISOR',
+    ASSISTANT:'APPROVAL_ASSISTANT',SUPERVISION_ASSISTANT:'APPROVAL_ASSISTANT','مساعد_الإشراف':'APPROVAL_ASSISTANT','مساعد_اشراف':'APPROVAL_ASSISTANT',
+    'مسؤول_الإشراف':'SUPERVISION_MANAGER','مسؤول_الاشراف':'SUPERVISION_MANAGER',REGION_OPERATIONS_MANAGER:'REGION_MANAGER','مسؤول_تشغيل_المنطقة':'REGION_MANAGER',
+    OPS_MANAGER:'OPERATIONS_MANAGER','مدير_العمليات':'OPERATIONS_MANAGER',OPS_DEPUTY:'OPERATIONS_DEPUTY','نائب_مدير_العمليات':'OPERATIONS_DEPUTY'};
+  return alias[value]||value;
 }
 
 function normalizeScopeMode_(value,roleId){
