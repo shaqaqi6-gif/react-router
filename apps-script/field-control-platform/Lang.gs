@@ -52,7 +52,8 @@ function importTranslations(token, rows) {
     const toAppend = [];
     rows.forEach(function(r){
       const ar = String(r[0] || '').trim(); if (!ar) return;
-      const en = String(r[1] || '').trim(), ur = String(r[2] || '').trim();
+      const en = safeCell_(String(r[1] || '').trim().slice(0, 2000)), ur = safeCell_(String(r[2] || '').trim().slice(0, 2000));
+      if (ar.length > 2000) return;
       if (index[ar]) { sh.getRange(index[ar], 2, 1, 2).setValues([[en, ur]]); updated++; }
       else { toAppend.push([ar, en, ur, '']); added++; }
     });

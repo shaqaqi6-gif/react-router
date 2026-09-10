@@ -137,7 +137,14 @@ function decodeEvidenceImage_(dataUrl){
   if(Math.floor(b64.length*3/4)>EVIDENCE_MAX_BYTES_)throw new Error('حجم الصورة كبير جدًا. الحد الأقصى 6 ميجابايت.');
   let bytes;
   try{bytes=Utilities.base64Decode(b64);}catch(e){throw new Error('تعذر قراءة الصورة.');}
-  if(!bytes||!bytes.length)throw new Error('الصورة فارغة.');
+  if(!bytes||bytes.length<12)throw new Error('الصورة فارغة.');
+  // V9.6 أمان: التحقق من بصمة الملف الحقيقية لا من النوع المعلَن فقط
+  const u=function(i){return bytes[i]<0?bytes[i]+256:bytes[i];};
+  const isJpg=u(0)===0xFF&&u(1)===0xD8&&u(2)===0xFF;
+  const isPng=u(0)===0x89&&u(1)===0x50&&u(2)===0x4E&&u(3)===0x47;
+  const isWebp=u(0)===0x52&&u(1)===0x49&&u(2)===0x46&&u(3)===0x46&&u(8)===0x57&&u(9)===0x45&&u(10)===0x42&&u(11)===0x50;
+  const okMagic=(mime==='image/png'&&isPng)||((mime==='image/jpeg'||mime==='image/jpg')&&isJpg)||(mime==='image/webp'&&isWebp);
+  if(!okMagic)throw new Error('الملف المرفق ليس صورة صحيحة.');
   return {bytes:bytes,mime:mime,ext:EVIDENCE_MIME_[mime]};
 }
 function evidenceFileName_(fileName,fallback,ext){
@@ -239,6 +246,7 @@ function listApproverCandidates(token,visitId){
   requirePermission_(s,'VISIT_PLAN_MANAGE');
   const v=findVisitObjectById_(limitText_(normalizeText_(visitId),80));
   if(!v)throw new Error('الزيارة غير موجودة.');
+  if(s.roleId!=='SYSTEM_ADMIN'&&!visitAllowed_(s,v))throw new Error('الزيارة خارج نطاقك.');
   const author=String(v.COMPUTER_NO||''), assigned=String(v.APPROVER_COMPUTER_NO||'');
   return sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(u){
     if(!toBool_(u.ACTIVE))return false;
@@ -261,6 +269,7 @@ function adminReassignApprover(token,visitId,approverComputerNo){
   approverComputerNo=limitText_(normalizeText_(approverComputerNo),32);
   const v=findVisitObjectById_(visitId);
   if(!v)throw new Error('الزيارة غير موجودة.');
+  if(s.roleId!=='SYSTEM_ADMIN'&&!visitAllowed_(s,v))throw new Error('الزيارة خارج نطاقك.');
   if(String(v.APPROVAL_STATUS||'')!=='PENDING')throw new Error('لا يمكن تغيير معتمِد زيارة تم اتخاذ قرار بشأنها.');
   if(approverComputerNo===String(v.COMPUTER_NO||''))throw new Error('لا يمكن إسناد الزيارة إلى منفّذها.');
   const u=findUserByComputerNo_(approverComputerNo);
@@ -588,7 +597,7 @@ function submitIssueResolution(token,issueId,payload){const s=requireSession_(to
     const ish=getDb_().getSheetByName(APP.SHEETS.ISSUES), x=sheetObjects_(ish).filter(function(r){return String(r.ISSUE_ID||'')===issueId;})[0];
     if(!x)throw new Error('الملاحظة غير موجودة.');
     const own=String(x.OWNER_COMPUTER_NO||x.CREATED_BY||'')===s.computerNo;
-    if(!own&&!hasPermission_(s,'ISSUE_MANAGE'))throw new Error('هذه الملاحظة ليست ضمن مسؤوليتك.');
+    if(!own&&!(hasPermission_(s,'ISSUE_MANAGE')&&issueAllowed_(s,x)))throw new Error('هذه الملاحظة ليست ضمن مسؤوليتك.');
     const st=String(x.STATUS||'');
     if(ISSUE_RESOLVABLE_.indexOf(st)===-1)throw new Error(st==='AWAITING_VERIFICATION'?'المعالجة مرسلة وبانتظار تحقق المساعد.':(st==='CLOSED'?'الملاحظة مغلقة.':'الملاحظة ليست في حالة تسمح بإرسال معالجة.'));
     let photo='';if(payload.photoData){photo=saveIssueResolutionPhoto_(issueId,payload.photoData,payload.fileName||'resolution.jpg');}
@@ -650,6 +659,7 @@ function adminUnlockVisitType(token,payload){
   if(UNLOCKABLE_VISIT_TYPES_.indexOf(visitType)===-1)throw new Error('يمكن فتح الزيارة الأسبوعية أو الشهرية فقط. اليومية مفتوحة دائمًا.');
   const user=findUserByComputerNo_(computerNo);
   if(!user||!toBool_(user.ACTIVE))throw new Error('المشرف غير موجود أو غير فعال.');
+  if(!seesAll_(s)&&!inTeam_(s,computerNo))throw new Error('المشرف خارج نطاقك.');
   const station=findStation_(stationNo);
   if(!station||!station.active)throw new Error('المحطة غير موجودة أو غير فعالة.');
   assertCanManageUnlocks_(s,station);
@@ -881,7 +891,7 @@ function getMyTeam(token){
 function getMySchedule(token){const s=requireSession_(token),today=dateKey_(new Date());const plans=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS)).filter(function(p){return toBool_(p.ACTIVE)&&String(p.COMPUTER_NO||'')===s.computerNo;});return plans.map(function(p){const due=dateKeyFromValue_(p.NEXT_DUE_DATE)||dateKeyFromValue_(p.START_DATE),station=findStation_(p.STATION_NO)||{stationName:'محطة '+p.STATION_NO};let status='UPCOMING',days=0;if(due){const dd=parseDateKey_(due),tt=parseDateKey_(today);days=Math.round((dd-tt)/86400000);if(days<0)status='OVERDUE';else if(days===0)status='DUE_TODAY';else if(days<=3)status='DUE_SOON';}return{planId:String(p.PLAN_ID||''),stationNo:String(p.STATION_NO||''),stationName:station.stationName,visitType:String(p.VISIT_TYPE||''),startDate:dateKeyFromValue_(p.START_DATE),anchorDate:dateKeyFromValue_(p.ANCHOR_DATE),lastVisitDate:dateKeyFromValue_(p.LAST_VISIT_DATE),nextDueDate:due,status:status,daysToDue:days};}).sort(function(a,b){return String(a.nextDueDate||'9999').localeCompare(String(b.nextDueDate||'9999'));});}
 
 function adminListVisitPlans(token){const s=requireSession_(token);requirePermission_(s,'VISIT_PLAN_MANAGE');return sheetObjects_(getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS)).filter(function(p){const station=findStation_(p.STATION_NO);return !station||stationAllowed_(s,station);}).map(function(p){return{planId:String(p.PLAN_ID||''),computerNo:String(p.COMPUTER_NO||''),stationNo:String(p.STATION_NO||''),visitType:String(p.VISIT_TYPE||''),startDate:dateKeyFromValue_(p.START_DATE),endDate:dateKeyFromValue_(p.END_DATE),active:toBool_(p.ACTIVE),approverComputerNo:String(p.APPROVER_COMPUTER_NO||''),anchorDate:dateKeyFromValue_(p.ANCHOR_DATE),lastVisitDate:dateKeyFromValue_(p.LAST_VISIT_DATE),nextDueDate:dateKeyFromValue_(p.NEXT_DUE_DATE),graceDays:Number(p.GRACE_DAYS||0),lastSatisfiedByType:String(p.LAST_SATISFIED_BY_TYPE||''),lastSatisfiedByVisitId:String(p.LAST_SATISFIED_BY_VISIT_ID||'')};});}
-function adminSaveVisitPlan(token,payload){const s=requireSession_(token);requirePermission_(s,'VISIT_PLAN_MANAGE');payload=payload||{};const no=normalizeText_(payload.computerNo),stationNo=normalizeText_(payload.stationNo),typ=normalizeText_(payload.visitType).toUpperCase(),start=normalizeText_(payload.startDate||dateKey_(new Date()));if(!no||!stationNo||!APP.VISIT_TYPES[typ])throw new Error('المشرف والمحطة ونوع الزيارة مطلوبة.');const station=findStation_(stationNo);if(!station)throw new Error('المحطة غير موجودة.');const u=userByNo_(no);if(!u)throw new Error('المشرف غير موجود.');const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS),id=normalizeText_(payload.planId||('PLAN-'+Utilities.getUuid().slice(0,10))), existing=sheetObjects_(sh).filter(function(p){return String(p.PLAN_ID||'')===id;})[0];const anchor=existing?dateKeyFromValue_(existing.ANCHOR_DATE):'',next=anchor?nextDueFromAnchor_(anchor,typ,dateKey_(new Date())):start,approver=normalizeText_(payload.approverComputerNo)||String(u.APPROVER_COMPUTER_NO||'')||resolveApproverForSupervisor_(no,station);const patch={COMPUTER_NO:no,STATION_NO:stationNo,VISIT_TYPE:typ,START_DATE:start,END_DATE:normalizeText_(payload.endDate),ACTIVE:payload.active!==false,APPROVER_COMPUTER_NO:approver,ANCHOR_DATE:anchor,NEXT_DUE_DATE:next,GRACE_DAYS:Number(payload.graceDays==null?settingValue_('PLAN_GRACE_DAYS','0'):payload.graceDays)};const count=updateRowsByKeys_(sh,{PLAN_ID:id},patch);if(!count){patch.PLAN_ID=id;patch.CREATED_AT=new Date();patch.CREATED_BY=s.computerNo;appendObject_(sh,patch);}audit_(s.computerNo,'VISIT_PLAN_SAVED',id,no+' '+stationNo+' '+typ);return{ok:true,planId:id};}
+function adminSaveVisitPlan(token,payload){const s=requireSession_(token);requirePermission_(s,'VISIT_PLAN_MANAGE');payload=payload||{};const no=normalizeText_(payload.computerNo),stationNo=normalizeText_(payload.stationNo),typ=normalizeText_(payload.visitType).toUpperCase(),start=normalizeText_(payload.startDate||dateKey_(new Date()));if(!no||!stationNo||!APP.VISIT_TYPES[typ])throw new Error('المشرف والمحطة ونوع الزيارة مطلوبة.');const station=findStation_(stationNo);if(!station)throw new Error('المحطة غير موجودة.');if(s.roleId!=='SYSTEM_ADMIN'&&!stationAllowed_(s,station))throw new Error('المحطة خارج نطاقك.');const u=userByNo_(no);if(!u)throw new Error('المشرف غير موجود.');if(!seesAll_(s)&&!inTeam_(s,no))throw new Error('المشرف خارج نطاقك.');const apNo=normalizeText_(payload.approverComputerNo);if(apNo){const ap=findUserByComputerNo_(apNo),aprid=ap?normalizeRoleId_(ap.ROLE_ID||ap.ROLE||''):'';if(!ap||!toBool_(ap.ACTIVE)||(aprid!=='SYSTEM_ADMIN'&&!getEffectivePermissions_(apNo,aprid).VISIT_APPROVE))throw new Error('المعتمِد المحدد لا يملك صلاحية اعتماد الزيارات.');}const sh=getDb_().getSheetByName(APP.SHEETS.VISIT_PLANS),id=normalizeText_(payload.planId||('PLAN-'+Utilities.getUuid().slice(0,10))), existing=sheetObjects_(sh).filter(function(p){return String(p.PLAN_ID||'')===id;})[0];const anchor=existing?dateKeyFromValue_(existing.ANCHOR_DATE):'',next=anchor?nextDueFromAnchor_(anchor,typ,dateKey_(new Date())):start,approver=normalizeText_(payload.approverComputerNo)||String(u.APPROVER_COMPUTER_NO||'')||resolveApproverForSupervisor_(no,station);const patch={COMPUTER_NO:no,STATION_NO:stationNo,VISIT_TYPE:typ,START_DATE:start,END_DATE:normalizeText_(payload.endDate),ACTIVE:payload.active!==false,APPROVER_COMPUTER_NO:approver,ANCHOR_DATE:anchor,NEXT_DUE_DATE:next,GRACE_DAYS:Number(payload.graceDays==null?settingValue_('PLAN_GRACE_DAYS','0'):payload.graceDays)};const count=updateRowsByKeys_(sh,{PLAN_ID:id},patch);if(!count){patch.PLAN_ID=id;patch.CREATED_AT=new Date();patch.CREATED_BY=s.computerNo;appendObject_(sh,patch);}audit_(s.computerNo,'VISIT_PLAN_SAVED',id,no+' '+stationNo+' '+typ);return{ok:true,planId:id};}
 
 function requiredOccurrences_(plan,startDate,endDate){const out=[],typ=String(plan.VISIT_TYPE||''),anchor=dateKeyFromValue_(plan.ANCHOR_DATE)||dateKeyFromValue_(plan.START_DATE);if(!anchor)return out;let d=anchor,guard=0;while(d&&d<startDate&&guard++<10000)d=nextDueFromAnchor_(anchor,typ,d);while(d&&d<=endDate&&guard++<10000){out.push(d);d=nextDueFromAnchor_(anchor,typ,d);}return out;}
 function calculatePlanMetrics_(plansAll,visitsAll,session,filters){const today=dateKey_(new Date()), start=filters.startDate||today,end=filters.endDate||today;let required=0,completed=0,overdue=0;const stations={};plansAll.forEach(function(p){if(!toBool_(p.ACTIVE))return;const st=findStation_(p.STATION_NO);if(st&&!stationAllowed_(session,st))return;if(filters.stationNo&&String(p.STATION_NO||'')!==filters.stationNo)return;if(filters.supervisor&&String(p.COMPUTER_NO||'')!==filters.supervisor)return;if(filters.visitType&&String(p.VISIT_TYPE||'')!==filters.visitType)return;const occ=requiredOccurrences_(p,start,end);required+=occ.length;stations[String(p.STATION_NO||'')]=true;const pv=visitsAll.filter(function(v){return String(v.COMPUTER_NO||'')===String(p.COMPUTER_NO||'')&&String(v.STATION_NO||'')===String(p.STATION_NO||'')&&String(v.VISIT_TYPE||'')===String(p.VISIT_TYPE||'')&&String(v.APPROVAL_STATUS||'')!=='REJECTED'&&dateInRange_(dateKeyFromValue_(v.DATE),start,end);});completed+=Math.min(occ.length,pv.length);const due=dateKeyFromValue_(p.NEXT_DUE_DATE)||dateKeyFromValue_(p.START_DATE);if(due&&due<today)overdue++;});return{required:required,completed:completed,overdue:overdue,coverageStations:Object.keys(stations).length,planCount:plansAll.length};}

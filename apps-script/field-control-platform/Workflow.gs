@@ -535,7 +535,22 @@ function installWorkflowTrigger(){
   return {ok:true,message:'تم تثبيت مراقب الزيارات والملاحظات كل ساعة.'};
 }
 
-function runWorkflowMonitor(){
+/* V9.6 أمان: كانت الدالة عامة بلا حارس فيستطيع أي زائر للرابط تشغيلها (إشعارات جماعية، تغيير حالات، استنزاف).
+   الآن تعمل فقط إذا جاء الاستدعاء من مشغّل المشروع نفسه (معرّف المشغّل يطابق مشغّلًا مسجلًا) أو من المحرر. */
+function workflowTriggerCall_(e){
+  try{
+    const uid=e&&e.triggerUid?String(e.triggerUid):'';
+    if(!uid)return false;
+    return ScriptApp.getProjectTriggers().some(function(t){return t.getHandlerFunction()==='runWorkflowMonitor'&&String(t.getUniqueId())===uid;});
+  }catch(err){return false;}
+}
+function runWorkflowMonitor(e){
+  if(!workflowTriggerCall_(e))requireEditorRun_();
+  const lock=LockService.getScriptLock();
+  if(!lock.tryLock(10000))return {skipped:true,reason:'busy'};
+  try{return runWorkflowMonitor_();}finally{try{lock.releaseLock();}catch(err){}}
+}
+function runWorkflowMonitor_(){
   const ss=getDb_(), now=new Date(), today=dateKey_(now);
   const visitsSh=ss.getSheetByName(APP.SHEETS.VISITS), issuesSh=ss.getSheetByName(APP.SHEETS.ISSUES), plansSh=ss.getSheetByName(APP.SHEETS.VISIT_PLANS);
   const visits=visitsSh.getDataRange().getValues(), vi=headerMap_(visits[0]||[]);

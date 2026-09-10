@@ -106,7 +106,8 @@ function getStationAssignmentPanel(token){
   const supervisors=users.filter(function(u){return normalizeRoleId_(u.ROLE_ID||u.ROLE||'')==='SUPERVISOR';}).map(function(u){
     const no=String(u.COMPUTER_NO||''),asst=String(u.APPROVER_COMPUTER_NO||''),au=byNo[asst];
     const nos=csvArray_(u.STATION_NOS);
-    return{computerNo:no,name:String(u.NAME||''),phone:String(u.PHONE||''),assistantComputerNo:asst,assistantName:au?String(au.NAME||''):'',
+    const mine=asst===s.computerNo||!asst||s.roleId!=='APPROVAL_ASSISTANT';
+    return{computerNo:no,name:String(u.NAME||''),phone:mine?String(u.PHONE||''):'',assistantComputerNo:asst,assistantName:au?String(au.NAME||''):'',
       isMine:asst===s.computerNo,unassigned:!asst,
       stations:nos.map(function(x){const st=findStation_(x);return{stationNo:x,stationName:st?st.stationName:('محطة '+x),region:st?st.region:''};})};
   }).sort(function(a,b){const ra=a.isMine?0:(a.unassigned?1:2),rb=b.isMine?0:(b.unassigned?1:2);if(ra!==rb)return ra-rb;return a.name.localeCompare(b.name,'ar');});
@@ -122,6 +123,9 @@ function assignStationsToSupervisor(token,supervisorComputerNo,stationNos,assist
   supervisorComputerNo=limitText_(normalizeText_(supervisorComputerNo),32);
   const su=findUserByComputerNo_(supervisorComputerNo);
   if(!su||!toBool_(su.ACTIVE)||normalizeRoleId_(su.ROLE_ID||su.ROLE||'')!=='SUPERVISOR')throw new Error('المشرف غير موجود أو غير نشط.');
+  // V9.6 أمان: مساعد الإشراف يسند لمشرفيه أو لمشرف بلا مساعد فقط؛ نقل مشرف من مساعد آخر لمدير العمليات/مدير النظام
+  const curAsst=String(su.APPROVER_COMPUTER_NO||'');
+  if(s.roleId==='APPROVAL_ASSISTANT'&&curAsst&&curAsst!==s.computerNo)throw new Error('هذا المشرف تحت مساعد إشراف آخر — نقله بينكما من مدير العمليات.');
   const wanted=[];const seen={};
   (Array.isArray(stationNos)?stationNos:csvArray_(stationNos)).forEach(function(x){
     const no=limitText_(normalizeText_(x),40);if(!no||seen[no])return;
@@ -146,6 +150,7 @@ function assignStationsToSupervisor(token,supervisorComputerNo,stationNos,assist
       const no=String(u.COMPUTER_NO||'');if(no===supervisorComputerNo)return;
       if(normalizeRoleId_(u.ROLE_ID||u.ROLE||'')!=='SUPERVISOR')return;
       const cur=csvArray_(u.STATION_NOS),keep=cur.filter(function(x){return wanted.indexOf(x)===-1;});
+      if(keep.length!==cur.length&&s.roleId==='APPROVAL_ASSISTANT'&&String(u.APPROVER_COMPUTER_NO||'')!==s.computerNo&&String(u.APPROVER_COMPUTER_NO||'')!=='')throw new Error('المحطة '+cur.filter(function(x){return wanted.indexOf(x)!==-1;})[0]+' مسندة لمشرف تحت مساعد آخر — نقلها من مدير العمليات.');
       if(keep.length!==cur.length){updateRowsByKeys_(ush,{COMPUTER_NO:no},{STATION_NOS:keep.join(','),UPDATED_AT:now});moved.push({from:no,stations:cur.filter(function(x){return wanted.indexOf(x)!==-1;})});clearSupervisorStationMemo_(no);}
     });
     const patch={STATION_NOS:wanted.join(','),SCOPE_MODE:'STATIONS',UPDATED_AT:now};

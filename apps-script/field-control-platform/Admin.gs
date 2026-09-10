@@ -310,7 +310,9 @@ function adminListUsers(token) {
 function adminSaveUser(token, payload) {
   const session = requireSession_(token);
   requirePermission_(session, 'USER_MANAGE');
-  payload = payload || {};
+  return withDbLock_(function(){ return adminSaveUser_(session, payload || {}); });
+}
+function adminSaveUser_(session, payload) {
 
   const computerNo = normalizeText_(payload.computerNo);
   const name = normalizeText_(payload.name);
@@ -323,6 +325,12 @@ function adminSaveUser(token, payload) {
   if(!/^\d{1,10}$/.test(computerNo))throw new Error('رقم الكمبيوتر أرقام فقط (حتى 10 خانات).');
   if(!findRole_(roleId))throw new Error('المنصب غير موجود.');
   if(computerNo===session.computerNo && (roleId!==session.roleId || !active))throw new Error('لا يمكنك تغيير منصبك أو إيقاف حسابك بنفسك.');
+  // V9.6: منصب مدير النظام وحساباته لا يلمسها إلا مدير نظام (USER_MANAGE وحدها لا تكفي)
+  if(session.roleId!=='SYSTEM_ADMIN'){
+    if(roleId==='SYSTEM_ADMIN')throw new Error('منح منصب مدير النظام لمدير النظام فقط.');
+    const target=findUserByComputerNo_(computerNo);
+    if(target&&normalizeRoleId_(target.ROLE_ID||target.ROLE||'')==='SYSTEM_ADMIN')throw new Error('تعديل حساب مدير النظام لمدير النظام فقط.');
+  }
 
   const sh = getDb_().getSheetByName(APP.SHEETS.USERS);
   const data = sh.getDataRange().getValues();
@@ -574,22 +582,22 @@ function exportDashboardReport(token,filters,lang){
     [L('الزيارات المطلوبة حسب الخطة','Visits required by plan','منصوبے کے مطابق مطلوبہ دورے'),dash.kpis.requiredVisits],
     [L('الزيارات المتأخرة حسب الخطة','Overdue visits by plan','منصوبے کے مطابق تاخیر شدہ دورے'),dash.kpis.overdueVisits]
   ];
-  s1.getRange(1,1,summary.length,2).setValues(summary);
+  s1.getRange(1,1,summary.length,2).setValues(summary.map(function(r){return r.map(safeCell_);}));
   styleReportHeader_(s1.getRange(1,1,1,2));
 
   const s2=report.insertSheet(L('الزيارات','Visits','دورے'));
   const vh=[L('رقم الزيارة','Visit ID','دورہ نمبر'),L('التاريخ','Date','تاریخ'),L('رقم الكمبيوتر','Computer No.','کمپیوٹر نمبر'),L('المشرف','Supervisor','سپروائزر'),L('رقم المحطة','Station No.','اسٹیشن نمبر'),L('اسم المحطة','Station name','اسٹیشن کا نام'),L('المنطقة','Region','علاقہ'),L('الفرع','Branch','برانچ'),L('نوع الزيارة','Visit type','دورے کی قسم'),L('النتيجة %','Score %','اسکور %'),L('غير مطابق','Fails','ناکام آئٹمز'),L('المدة (دقيقة)','Duration (min)','دورانیہ (منٹ)'),L('الاعتماد','Approval','منظوری')];
-  s2.getRange(1,1,1,vh.length).setValues([vh]);styleReportHeader_(s2.getRange(1,1,1,vh.length));
+  s2.getRange(1,1,1,vh.length).setValues([vh.map(safeCell_)]);styleReportHeader_(s2.getRange(1,1,1,vh.length));
   if(visits.length)s2.getRange(2,1,visits.length,vh.length).setValues(visits.map(function(v){return[
     v.visitId,v.date,v.computerNo,v.supervisor,v.stationNo,v.stationName,v.region,v.branch,pick(VT,v.visitType),v.score,v.failCount,v.durationMinutes,pick(AP,v.approvalStatus)
-  ];}));
+  ].map(safeCell_);}));
 
   const s3=report.insertSheet(L('الملاحظات','Issues','مشاہدات'));
   const ih=[L('رقم الملاحظة','Issue ID','مشاہدہ نمبر'),L('رقم المحطة','Station No.','اسٹیشن نمبر'),L('اسم المحطة','Station name','اسٹیشن کا نام'),L('المنطقة','Region','علاقہ'),L('التصنيف','Category','زمرہ'),L('البند','Item','آئٹم'),L('الحالة','Status','حالت'),L('الخطورة','Severity','شدت'),L('الملاحظة','Note','نوٹ'),L('العمر (يوم)','Age (days)','عمر (دن)'),L('سجّلها','Created by','درج کنندہ')];
-  s3.getRange(1,1,1,ih.length).setValues([ih]);styleReportHeader_(s3.getRange(1,1,1,ih.length));
+  s3.getRange(1,1,1,ih.length).setValues([ih.map(safeCell_)]);styleReportHeader_(s3.getRange(1,1,1,ih.length));
   if(issues.length)s3.getRange(2,1,issues.length,ih.length).setValues(issues.map(function(x){return[
     x.issueId,x.stationNo,x.stationName,x.region,x.category,x.itemText,pick(ST,x.status),pick(SV,x.severity),x.note,x.ageDays,x.createdBy
-  ];}));
+  ].map(safeCell_);}));
 
   [s1,s2,s3].forEach(function(sh){sh.setFrozenRows(1);sh.autoResizeColumns(1,sh.getLastColumn());});
   audit_(session.computerNo,'REPORT_EXPORTED',report.getId(),report.getName());
@@ -691,12 +699,13 @@ function seedBootstrapAdmin_(ss){
     audit_(admin.computerNo,'ADMIN_ACCOUNT_RENAMED',admin.legacyComputerNo+' -> '+admin.computerNo,'ترحيل حساب مدير النظام');
     return;
   }
-  const salt=makeSalt_();
+  const salt=makeSalt_(),password=makeTempPassword_();
   appendObject_(sh,{
-    COMPUTER_NO:admin.computerNo,NAME:admin.name,PASSWORD_HASH:hashPassword_('Aldrees@2026',salt),SALT:salt,
+    COMPUTER_NO:admin.computerNo,NAME:admin.name,PASSWORD_HASH:hashPassword_(password,salt),SALT:salt,
     ROLE:'SYSTEM_ADMIN',ROLE_ID:'SYSTEM_ADMIN',REGIONS:'ALL',STATION_NOS:'',SCOPE_MODE:'ALL',
     ACTIVE:true,MUST_CHANGE_PASSWORD:true,CREATED_AT:new Date(),UPDATED_AT:new Date()
   });
+  return {created:true,password:password};
 }
 function migrateLegacyUsers_(ss){
   const sh=ss.getSheetByName(APP.SHEETS.USERS);
@@ -806,10 +815,13 @@ function isFixedRole_(roleId){return roleId==='SYSTEM_ADMIN'||!!ROLE_MATRIX_[rol
 function adminImportUsers(token, payload) {
   const session = requireSession_(token);
   requirePermission_(session, 'USER_MANAGE');
-  payload = payload || {};
+  return withDbLock_(function(){ return adminImportUsers_(session, payload || {}); });
+}
+function adminImportUsers_(session, payload) {
   const rows = Array.isArray(payload.rows) ? payload.rows : [];
   const roleId = normalizeRoleId_(payload.roleId || 'SUPERVISOR');
   if (!findRole_(roleId)) throw new Error('الدور غير موجود.');
+  if (roleId === 'SYSTEM_ADMIN') throw new Error('لا يُستورد مدير النظام دفعةً.');
   const tempPassword = String(payload.tempPassword || '');
   if (tempPassword.length < 8) throw new Error('كلمة المرور المؤقتة يجب أن تكون 8 خانات على الأقل.');
   const scopeMode = normalizeScopeMode_(payload.scopeMode, roleId);

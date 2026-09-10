@@ -4,7 +4,7 @@
    ===================================================================== */
 
 const APP = Object.freeze({
-  VERSION: '9.5.0',
+  VERSION: '9.6.0',
   NAME: 'منصة الرقابة والزيارات الميدانية',
   COMPANY: 'شركة الدريس للخدمات البترولية والنقليات',
   DB_PROP: 'ALDREES_CHECKLIST_DB_ID',
@@ -145,7 +145,7 @@ const EXPECTED_FUNCTIONS_ = Object.freeze({
   'Lang.gs':['getTranslations','importTranslations','ensureTranslationsSheet_','xl_']
 });
 function getServerHealth(token) {
-  requireSession_(token);
+  requireSession_(token, { allowMustChange: true });
   const g = (typeof globalThis !== 'undefined') ? globalThis : this;
   const missing = {};
   Object.keys(EXPECTED_FUNCTIONS_).forEach(function(file){
@@ -181,11 +181,22 @@ function includeOptional_(name) {
 
 /* V6.2 security: maintenance functions can only run from the Apps Script editor by the project owner,
    never from the web app client (google.script.run) — otherwise anyone opening the link could reset the admin. */
+/* V9.6: العمليات المدمِّرة (التصفير، إعادة ضبط مدير النظام) تحتاج مفتاحًا يدويًا إضافة إلى هوية المالك:
+   خصائص النص البرمجي → MAINTENANCE_UNLOCK = 1. يُحذف المفتاح تلقائيًا بعد التنفيذ، فلا يصل إليها أي سكربت
+   يعمل داخل صفحة المتصفح حتى لو كان المالك نفسه مسجَّل الدخول. */
+function requireMaintenanceUnlock_() {
+  const props = PropertiesService.getScriptProperties();
+  if (String(props.getProperty('MAINTENANCE_UNLOCK') || '') !== '1') {
+    throw new Error('عملية محمية: افتح إعدادات المشروع ← خصائص النص البرمجي، وأضف MAINTENANCE_UNLOCK بقيمة 1، ثم أعد التشغيل من المحرر. يُحذف المفتاح تلقائيًا بعد التنفيذ.');
+  }
+}
+function consumeMaintenanceUnlock_() { try { PropertiesService.getScriptProperties().deleteProperty('MAINTENANCE_UNLOCK'); } catch (e) {} }
 function requireEditorRun_() {
   let active = '', effective = '';
   try { active = String(Session.getActiveUser().getEmail() || ''); } catch (e) {}
   try { effective = String(Session.getEffectiveUser().getEmail() || ''); } catch (e) {}
-  if (!active && !effective) return; // نادر: بيئة لا تكشف الهوية — لا يمكن أن تكون طلب ويب لأن المُنفّذ الفعلي معروف دائماً في النشر
+  // V9.6: عند غياب الهوية نرفض (كان يسمح) — الرفض أسلم من السماح
+  if (!active && !effective) throw new Error('هذه العملية تُنفَّذ من محرر Apps Script فقط بواسطة مالك المشروع.');
   if (!active || !effective || active.toLowerCase() !== effective.toLowerCase()) {
     throw new Error('هذه العملية تُنفَّذ من محرر Apps Script فقط بواسطة مالك المشروع.');
   }
@@ -194,7 +205,7 @@ function requireEditorRun_() {
   const dbId = PropertiesService.getScriptProperties().getProperty(APP.DB_PROP);
   if (dbId) {
     let owner = '';
-    try { const o = DriveApp.getFileById(dbId).getOwner(); owner = o ? String(o.getEmail() || '') : ''; } catch (e) { return; }
+    try { const o = DriveApp.getFileById(dbId).getOwner(); owner = o ? String(o.getEmail() || '') : ''; } catch (e) { throw new Error('تعذر التحقق من مالك قاعدة البيانات — أُلغيت العملية.'); }
     if (owner && owner.toLowerCase() !== effective.toLowerCase()) {
       throw new Error('هذه العملية تُنفَّذ من محرر Apps Script فقط بواسطة مالك المشروع.');
     }
@@ -250,7 +261,7 @@ function setupOrUpgradeV4_() {
   seedSettings_(ss);
   seedRoles_(ss);
   seedRolePermissions_(ss);
-  seedBootstrapAdmin_(ss);
+  const adminSeed = seedBootstrapAdmin_(ss);
   migrateLegacyUsers_(ss);
   seedChecklist_(ss);
   const stationSeed = seedInitialStations_(ss);
@@ -270,9 +281,10 @@ function setupOrUpgradeV4_() {
     stationsInserted: stationSeed.inserted,
     stationsTotal: stationSeed.total,
     initialComputerNo: APP.ADMIN.computerNo,
-    initialPassword: 'Aldrees@2026',
+    initialPassword: (adminSeed && adminSeed.password) ? adminSeed.password : '(لم تتغير — حساب مدير النظام موجود)',
     note: 'الترقية تحافظ على كلمات مرور جميع المستخدمين الحالية ولا تعيد تهيئتها. انشر إصدارًا جديدًا بعد الترقية.'
   };
+  consumeMaintenanceUnlock_();
   Logger.log(JSON.stringify(result, null, 2));
   return result;
 }
@@ -304,41 +316,32 @@ function login(computerNo, password) {
   if (!computerNo || !password) throw new Error('أدخل رقم الكمبيوتر وكلمة المرور.');
   // V6.2: brute-force protection — 6 failed attempts lock the account for 10 minutes
   // V8.1.4.7: مفتاح الكاش يُنظَّف من أي رموز غير آمنة، والعدّاد يُقرأ كرقم صحيح دائماً.
-  const lockCache = CacheService.getScriptCache();
+  /* V9.6: العدّاد يُقرأ ويُزاد داخل قفل واحد (كان يُقرأ ثم يُكتب بلا قفل فتتجاوزه طلبات متوازية)،
+     ويُطبَّق أيضًا عدّاد عام لكل الحسابات ضد التخمين الموزّع. */
   const failKey = 'LOGIN_FAIL_' + cacheKeyPart_(computerNo);
-  const parsedFails = parseInt(lockCache.get(failKey), 10);
-  const fails = isNaN(parsedFails) || parsedFails < 0 ? 0 : parsedFails;
-  if (fails >= 6) throw new Error('تم إيقاف الدخول مؤقتًا بسبب محاولات خاطئة متكررة. حاول بعد 10 دقائق.');
+  loginThrottle_(failKey, false);
 
   const user = findUserByComputerNo_(computerNo);
-  if (!user || !toBool_(user.ACTIVE)) { lockCache.put(failKey, String(fails + 1), 600); throw new Error('بيانات الدخول غير صحيحة.'); }
+  if (!user || !toBool_(user.ACTIVE)) { loginThrottle_(failKey, true); throw new Error('بيانات الدخول غير صحيحة.'); }
 
-  const expected = hashPassword_(password, String(user.SALT || ''));
-  if (!timingSafeEquals_(expected, String(user.PASSWORD_HASH || ''))) {
+  const check = verifyPassword_(password, String(user.SALT || ''), String(user.PASSWORD_HASH || ''));
+  if (!check.ok) {
     audit_(computerNo, 'LOGIN_FAILED', computerNo, 'كلمة مرور غير صحيحة');
-    lockCache.put(failKey, String(fails + 1), 600);
+    loginThrottle_(failKey, true);
     throw new Error('بيانات الدخول غير صحيحة.');
   }
+  // ترقية التجزئة القديمة إلى v2 بصمت عند أول دخول ناجح
+  if (check.upgrade) {
+    try {
+      const newSalt = makeSalt_(), newHash = hashPassword_(password, newSalt);
+      updateRowsByKeys_(getDb_().getSheetByName(APP.SHEETS.USERS), { COMPUTER_NO: String(user.COMPUTER_NO) }, { PASSWORD_HASH: newHash, SALT: newSalt, UPDATED_AT: new Date() });
+      user.PASSWORD_HASH = newHash; user.SALT = newSalt;
+    } catch (e) {}
+  }
 
-  const roleId = normalizeRoleId_(user.ROLE_ID || user.ROLE || 'SUPERVISOR');
-  const permissions = getEffectivePermissions_(computerNo, roleId);
-  const session = {
-    computerNo: String(user.COMPUTER_NO),
-    name: String(user.NAME || ''),
-    roleId: roleId,
-    roleName: getRoleName_(roleId),
-    regions: csvArray_(user.REGIONS),
-    regionLabel: regionLabelForUser_(user, roleId),
-    stationNos: csvArray_(user.STATION_NOS),
-    scopeMode: normalizeScopeMode_(user.SCOPE_MODE, roleId),
-    approverComputerNo: String(user.APPROVER_COMPUTER_NO || ''),
-    managerComputerNo: String(user.MANAGER_COMPUTER_NO || ''),
-    permissions: permissions,
-    mustChangePassword: toBool_(user.MUST_CHANGE_PASSWORD),
-    issuedAt: Date.now()
-  };
+  const session = sessionFromUser_(user);
 
-  lockCache.remove(failKey);
+  try { CacheService.getScriptCache().remove(failKey); } catch (e) {}
   purgeExpiredSessions_();
   const token = makeToken_();
   sessionPut_(token, session);
@@ -350,6 +353,40 @@ function login(computerNo, password) {
     visitTypes: APP.VISIT_TYPES,
     gpsThresholds: gpsThresholds_(),
     brand: { appName: APP.NAME, company: APP.COMPANY, version: APP.VERSION }
+  };
+}
+
+/* V9.6: عدّاد محاولات الدخول — 6 محاولات للحساب خلال 10 دقائق، و60 محاولة فاشلة إجمالًا لكل الحسابات
+   خلال 10 دقائق (ضد التخمين الموزّع). القراءة والزيادة داخل قفل واحد. */
+function loginThrottle_(failKey, increment) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw new Error('النظام مشغول بعملية أخرى. أعد المحاولة بعد لحظات.');
+  try {
+    const cache = CacheService.getScriptCache();
+    const n = parseInt(cache.get(failKey), 10) || 0, g = parseInt(cache.get('LOGIN_FAIL_GLOBAL'), 10) || 0;
+    if (increment) { cache.put(failKey, String(n + 1), 600); cache.put('LOGIN_FAIL_GLOBAL', String(g + 1), 600); return; }
+    if (n >= 6) throw new Error('تم إيقاف الدخول مؤقتًا بسبب محاولات خاطئة متكررة. حاول بعد 10 دقائق.');
+    if (g >= 60) throw new Error('تم إيقاف الدخول مؤقتًا بسبب محاولات خاطئة متكررة. حاول بعد 10 دقائق.');
+  } finally { try { lock.releaseLock(); } catch (e) {} }
+}
+/* V9.6: الجلسة تُبنى من صف المستخدم في مكان واحد (الدخول، الاستئناف، وإعادة التحقق في كل طلب) */
+function sessionFromUser_(user, prev) {
+  const computerNo = String(user.COMPUTER_NO), roleId = normalizeRoleId_(user.ROLE_ID || user.ROLE || 'SUPERVISOR');
+  return {
+    computerNo: computerNo,
+    name: String(user.NAME || ''),
+    roleId: roleId,
+    roleName: getRoleName_(roleId),
+    regions: csvArray_(user.REGIONS),
+    regionLabel: regionLabelForUser_(user, roleId),
+    stationNos: csvArray_(user.STATION_NOS),
+    scopeMode: normalizeScopeMode_(user.SCOPE_MODE, roleId),
+    approverComputerNo: String(user.APPROVER_COMPUTER_NO || ''),
+    managerComputerNo: String(user.MANAGER_COMPUTER_NO || ''),
+    permissions: getEffectivePermissions_(computerNo, roleId),
+    mustChangePassword: toBool_(user.MUST_CHANGE_PASSWORD),
+    pwStamp: String(user.PASSWORD_HASH || '').slice(-16),
+    issuedAt: (prev && prev.issuedAt) || Date.now()
   };
 }
 
@@ -365,32 +402,24 @@ function gpsThresholds_() {
 
 function resumeSession(token) {
   // V4.6: validates a stored token and returns a fresh profile (permissions re-read).
-  const session = requireSession_(token);
-  const user = findUserByComputerNo_(session.computerNo);
+  const prev = requireSession_(token, { allowMustChange: true });
+  const user = findUserByComputerNo_(prev.computerNo);
   if (!user || !toBool_(user.ACTIVE)) { logout(token); throw new Error('انتهت الجلسة. سجّل الدخول مرة أخرى.'); }
-  const roleId = normalizeRoleId_(user.ROLE_ID || user.ROLE || 'SUPERVISOR');
-  session.roleId = roleId;
-  session.roleName = getRoleName_(roleId);
-  session.name = String(user.NAME || '');
-  session.regions = csvArray_(user.REGIONS);
-  session.regionLabel = regionLabelForUser_(user, roleId);
-  session.stationNos = csvArray_(user.STATION_NOS);
-  session.scopeMode = normalizeScopeMode_(user.SCOPE_MODE, roleId);
-  session.approverComputerNo = String(user.APPROVER_COMPUTER_NO || '');
-  session.managerComputerNo = String(user.MANAGER_COMPUTER_NO || '');
-  session.permissions = getEffectivePermissions_(session.computerNo, roleId);
-  session.mustChangePassword = toBool_(user.MUST_CHANGE_PASSWORD);
+  const session = sessionFromUser_(user, prev);
   sessionPut_(token, session);
   return { token: token, profile: session, visitTypes: APP.VISIT_TYPES, gpsThresholds: gpsThresholds_(), brand: { appName: APP.NAME, company: APP.COMPANY, version: APP.VERSION } };
 }
 
 function logout(token) {
-  if (token) sessionRemove_(token);
+  if (token) sessionRemove_(String(token).slice(0, 128));
   return true;
 }
 
 function changePassword(token, currentPassword, newPassword) {
-  const session = requireSession_(token);
+  const session = requireSession_(token, { allowMustChange: true });
+  return withDbLock_(function(){ return changePassword_(token, session, currentPassword, newPassword); });
+}
+function changePassword_(token, session, currentPassword, newPassword) {
   currentPassword = String(currentPassword || '');
   newPassword = String(newPassword || '');
 
@@ -409,17 +438,23 @@ function changePassword(token, currentPassword, newPassword) {
     if (String(data[r][idx.COMPUTER_NO]) !== session.computerNo) continue;
     if (!toBool_(data[r][idx.ACTIVE])) throw new Error('الحساب موقوف. راجع مدير النظام.');
     const salt = String(data[r][idx.SALT] || '');
-    if (!timingSafeEquals_(hashPassword_(currentPassword, salt), String(data[r][idx.PASSWORD_HASH] || ''))) {
+    const failKey = 'LOGIN_FAIL_' + cacheKeyPart_(session.computerNo);
+    loginThrottle_(failKey, false);
+    if (!verifyPassword_(currentPassword, salt, String(data[r][idx.PASSWORD_HASH] || '')).ok) {
+      loginThrottle_(failKey, true);
       throw new Error('كلمة المرور الحالية غير صحيحة.');
     }
 
-    const newSalt = makeSalt_();
-    setCellByHeader_(sh, r + 1, idx, 'PASSWORD_HASH', hashPassword_(newPassword, newSalt));
+    const newSalt = makeSalt_(), newHash = hashPassword_(newPassword, newSalt);
+    setCellByHeader_(sh, r + 1, idx, 'PASSWORD_HASH', newHash);
     setCellByHeader_(sh, r + 1, idx, 'SALT', newSalt);
     setCellByHeader_(sh, r + 1, idx, 'MUST_CHANGE_PASSWORD', false);
     setCellByHeader_(sh, r + 1, idx, 'UPDATED_AT', new Date());
 
+    // V9.6: تغيير كلمة المرور يُبطل كل الجلسات الأخرى لهذا المستخدم (يبقى هذا الجهاز فقط)
     session.mustChangePassword = false;
+    session.pwStamp = newHash.slice(-16);
+    invalidateOtherSessions_(session.computerNo, token);
     sessionPut_(token, session);
     audit_(session.computerNo, 'PASSWORD_CHANGED', session.computerNo, 'تم تغيير كلمة المرور');
     return { ok: true };
@@ -780,6 +815,12 @@ function readSheetObjects_(sh){
   return out;
 }
 
+/* V9.6 أمان: أي نص يبدأ بـ = + - @ أو تبويب يُخزَّن كنص لا كصيغة (حقن الصيغ في Google Sheets/Excel).
+   الفاصلة العليا في أول الخلية تُخفيها Sheets ولا تُعاد عند القراءة. */
+function safeCell_(v){
+  if(typeof v!=='string')return v;
+  return /^[=+\-@\t\r]/.test(v)?"'"+v:v;
+}
 function appendObject_(sh,obj){
   appendObjects_(sh,[obj]);
 }
@@ -787,7 +828,7 @@ function appendObject_(sh,obj){
 function appendObjects_(sh,objs){
   if(!objs||!objs.length)return;
   const headers=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
-  const rows=objs.map(function(o){return headers.map(function(h){return o[h]!==undefined?o[h]:'';});});
+  const rows=objs.map(function(o){return headers.map(function(h){return safeCell_(o[h]!==undefined?o[h]:'');});});
   sh.getRange(sh.getLastRow()+1,1,rows.length,headers.length).setValues(rows);
   invalidateSheet_(sh);
 }
@@ -796,7 +837,7 @@ function patchRowByNumber_(sh,rowNumber,patch){
   const headers=sh.getRange(1,1,1,sh.getLastColumn()).getValues()[0].map(String);
   const idx=headerMap_(headers);
   Object.keys(patch).forEach(function(k){
-    if(idx[k]!==undefined)sh.getRange(rowNumber,idx[k]+1).setValue(patch[k]);
+    if(idx[k]!==undefined)sh.getRange(rowNumber,idx[k]+1).setValue(safeCell_(patch[k]));
   });
   invalidateSheet_(sh);
 }
@@ -818,7 +859,7 @@ function updateRowsByKeys_(sh,keys,patch){
     if(last&&c===last[last.length-1]+1)last.push(c);
     else runs.push([c]);
   });
-  const byCol={};patchNames.forEach(function(k){byCol[idx[k]]=patch[k];});
+  const byCol={};patchNames.forEach(function(k){byCol[idx[k]]=safeCell_(patch[k]);});
   let count=0;
   for(let r=1;r<data.length;r++){
     let ok=true;
@@ -837,7 +878,7 @@ function updateRowsByKeys_(sh,keys,patch){
 }
 
 function setCellByHeader_(sh,rowNumber,idx,key,value){
-  if(idx[key]!==undefined){sh.getRange(rowNumber,idx[key]+1).setValue(value);invalidateSheet_(sh);}
+  if(idx[key]!==undefined){sh.getRange(rowNumber,idx[key]+1).setValue(safeCell_(value));invalidateSheet_(sh);}
 }
 
 /* =========================
@@ -975,8 +1016,21 @@ function sessionRemove_(token) {
   try { CacheService.getScriptCache().remove('SESSION_' + token); } catch (e) {}
   try { PropertiesService.getScriptProperties().deleteProperty('SESSION_' + token); } catch (e) {}
 }
-function requireSession_(token){
-  token=String(token||'');
+const SESSION_ABSOLUTE_MS_=7*24*3600*1000;
+function invalidateOtherSessions_(computerNo,keepToken){
+  try{
+    const props=PropertiesService.getScriptProperties();const all=props.getProperties();
+    Object.keys(all).forEach(function(k){
+      if(k.indexOf('SESSION_')!==0||k==='SESSION_'+keepToken)return;
+      try{const s=JSON.parse(all[k]);if(String(s.computerNo||'')===String(computerNo))sessionRemove_(k.slice(8));}catch(e){}
+    });
+  }catch(e){}
+}
+/* V9.6: في كل طلب تُعاد قراءة صف المستخدم: الإيقاف أو تغيير المنصب أو إعادة ضبط كلمة المرور من الإدارة
+   يُنهي الجلسة فورًا لا بعد ساعات. وكلمة المرور المؤقتة لا تفتح أي شيء غير شاشة تغييرها. */
+function requireSession_(token,opts){
+  opts=opts||{};
+  token=String(token||'').slice(0,128);
   if(!token)throw new Error('انتهت الجلسة. سجّل الدخول مرة أخرى.');
   let raw=null;
   try{raw=CacheService.getScriptCache().get('SESSION_'+token);}catch(e){}
@@ -985,8 +1039,19 @@ function requireSession_(token){
     if(raw){ try{CacheService.getScriptCache().put('SESSION_'+token,raw,APP.SESSION_SECONDS);}catch(e){} }
   }
   if(!raw)throw new Error('انتهت الجلسة. سجّل الدخول مرة أخرى.');
-  const session=JSON.parse(raw);
+  let session=JSON.parse(raw);
   if(session.expiresAt && Date.now()>session.expiresAt){ sessionRemove_(token); throw new Error('انتهت الجلسة. سجّل الدخول مرة أخرى.'); }
+  if(session.issuedAt && Date.now()-Number(session.issuedAt)>SESSION_ABSOLUTE_MS_){ sessionRemove_(token); throw new Error('انتهت الجلسة. سجّل الدخول مرة أخرى.'); }
+  const user=findUserByComputerNo_(session.computerNo);
+  if(!user||!toBool_(user.ACTIVE)){ sessionRemove_(token); throw new Error('انتهت الجلسة. سجّل الدخول مرة أخرى.'); }
+  const stamp=String(user.PASSWORD_HASH||'').slice(-16);
+  if(session.pwStamp&&session.pwStamp!==stamp){ sessionRemove_(token); throw new Error('انتهت الجلسة. سجّل الدخول مرة أخرى.'); }
+  const roleNow=normalizeRoleId_(user.ROLE_ID||user.ROLE||'SUPERVISOR');
+  if(roleNow!==session.roleId||String(user.SCOPE_MODE||'')!==String(session.scopeModeRaw||user.SCOPE_MODE||'')||toBool_(user.MUST_CHANGE_PASSWORD)!==!!session.mustChangePassword||!session.pwStamp){
+    session=sessionFromUser_(user,session);session.scopeModeRaw=String(user.SCOPE_MODE||'');
+    try{sessionPut_(token,session);}catch(e){}
+  }
+  if(session.mustChangePassword&&!opts.allowMustChange)throw new Error('يجب تغيير كلمة المرور المؤقتة أولًا.');
   return session;
 }
 function purgeExpiredSessions_(){
@@ -999,12 +1064,44 @@ function purgeExpiredSessions_(){
   }catch(e){}
 }
 
-function hashPassword_(password,salt){
+/* V9.6 أمان: التجزئة الجديدة v2 = HMAC-SHA256 مكرَّر (PW_HASH_ITER_ مرة) بملح لكل مستخدم ومفتاح سرّي (pepper)
+   محفوظ في خصائص النص البرمجي — لا يمكن لأحد يقرأ ورقة USERS استرجاع كلمات المرور بسرعة.
+   الصيغة المخزنة: v2$<iterations>$<hex>. التجزئات القديمة (hex فقط) تُقبل مرة ثم تُرقّى تلقائيًا عند أول دخول ناجح. */
+const PW_HASH_ITER_=5000;
+function getPepper_(){
+  const p=PropertiesService.getScriptProperties().getProperty(APP.PEPPER_PROP);
+  if(!p)throw new Error('مفتاح التشفير غير مهيأ. شغّل upgradeSystemV4 من المحرر.');
+  return p;
+}
+function hexBytes_(bytes){return bytes.map(function(b){const v=(b<0?b+256:b).toString(16);return v.length===1?'0'+v:v;}).join('');}
+function hashPasswordLegacy_(password,salt){
   const pepper=PropertiesService.getScriptProperties().getProperty(APP.PEPPER_PROP)||'';
-  const bytes=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,String(password)+'|'+String(salt)+'|'+pepper,Utilities.Charset.UTF_8);
-  return bytes.map(function(b){const v=(b<0?b+256:b).toString(16);return v.length===1?'0'+v:v;}).join('');
+  return hexBytes_(Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,String(password)+'|'+String(salt)+'|'+pepper,Utilities.Charset.UTF_8));
+}
+function hashPassword_(password,salt,iterations){
+  const iter=Number(iterations)||PW_HASH_ITER_;
+  const key=Utilities.newBlob(String(salt)+'|'+getPepper_()).getBytes();
+  let h=Utilities.computeHmacSha256Signature(Utilities.newBlob(String(password)).getBytes(),key);
+  for(let i=1;i<iter;i++)h=Utilities.computeHmacSha256Signature(h,key);
+  return 'v2$'+iter+'$'+hexBytes_(h);
+}
+/* يتحقق من كلمة المرور بأي صيغة مخزنة؛ يعيد {ok, upgrade} حيث upgrade=true إذا كانت الصيغة قديمة */
+function verifyPassword_(password,salt,stored){
+  stored=String(stored||'');
+  if(stored.indexOf('v2$')===0){
+    const parts=stored.split('$');const iter=Number(parts[1])||PW_HASH_ITER_;
+    return {ok:timingSafeEquals_(hashPassword_(password,salt,iter),stored),upgrade:iter!==PW_HASH_ITER_};
+  }
+  return {ok:timingSafeEquals_(hashPasswordLegacy_(password,salt),stored),upgrade:true};
 }
 function makeSalt_(){return Utilities.getUuid()+Utilities.getUuid();}
+/* V9.6: كلمة مرور مؤقتة عشوائية تُطبع مرة واحدة في نتيجة التشغيل من المحرر (بدل ثابت مكتوب في الشيفرة) */
+function makeTempPassword_(){
+  const alphabet='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789';
+  const bytes=Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256,Utilities.getUuid()+Utilities.getUuid()+Date.now(),Utilities.Charset.UTF_8);
+  let out='';for(let i=0;i<10;i++){out+=alphabet.charAt(((bytes[i]<0?bytes[i]+256:bytes[i])+i*7)%alphabet.length);}
+  return 'Ald-'+out;
+}
 function makeToken_(){return Utilities.base64EncodeWebSafe(Utilities.getUuid()+Utilities.getUuid()).replace(/=+$/,'');}
 function makeVisitId_(computerNo){return 'VIS-'+Utilities.formatDate(new Date(),APP.TZ,'yyyyMMdd-HHmmss')+'-'+String(computerNo)+'-'+Utilities.getUuid().slice(0,6);}
 function makeIssueId_(stationNo){return 'ISS-'+String(stationNo)+'-'+Utilities.formatDate(new Date(),APP.TZ,'yyyyMMddHHmmss')+'-'+Utilities.getUuid().slice(0,5);}
@@ -1016,7 +1113,7 @@ function makeIssueId_(stationNo){return 'ISS-'+String(stationNo)+'-'+Utilities.f
    Run manually from Apps Script editor only when the bootstrap admin cannot sign in.
    ========================= */
 function RESET_SYSTEM_ADMIN_ACCESS() {
-  requireEditorRun_();
+  requireEditorRun_();requireMaintenanceUnlock_();
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty(APP.PEPPER_PROP)) {
     props.setProperty(APP.PEPPER_PROP, Utilities.getUuid() + Utilities.getUuid());
@@ -1024,7 +1121,7 @@ function RESET_SYSTEM_ADMIN_ACCESS() {
 
   const ss = getDb_();
   const sh = ensureSheet_(ss, APP.SHEETS.USERS, HEADERS.USERS);
-  const temporaryPassword = 'Aldrees@2026';
+  const temporaryPassword = makeTempPassword_();
   const salt = makeSalt_();
   const patch = {
     NAME: APP.ADMIN.name,
@@ -1147,7 +1244,7 @@ function renameSupervisorRoleV9_(ss){
    المستخدمين والأدوار والصلاحيات والمحطات وقوائم التحقق والإعدادات. يُنفَّذ من المحرر فقط. */
 const RESET_SHEETS_=Object.freeze(['VISITS','DETAILS','ISSUES','ISSUE_UPDATES','VISIT_PLANS','AUDIT','NOTIFICATIONS','TICKETS','TICKET_MESSAGES','STATION_ASSIGNMENTS','VISIT_UNLOCKS','VISIT_REQUESTS']);
 function resetForLiveTrial(){
-  requireEditorRun_();
+  requireEditorRun_();requireMaintenanceUnlock_();
   const ss=getDb_(),out={};
   RESET_SHEETS_.forEach(function(k){
     const name=APP.SHEETS[k],sh=ss.getSheetByName(name);if(!sh){out[name]='غير موجودة';return}
@@ -1159,11 +1256,12 @@ function resetForLiveTrial(){
   invalidateAllSheetCache_();
   Object.keys(MEMO_).forEach(function(k){delete MEMO_[k];});
   try{audit_(APP.ADMIN.computerNo,'RESET_FOR_LIVE_TRIAL','','تصفير البيانات التشغيلية قبل التجربة الفعلية');}catch(e){}
+  consumeMaintenanceUnlock_();
   return {ok:true,cleared:out,note:'بقيت بيانات المستخدمين والأدوار والمحطات وقوائم التحقق والإعدادات. صور الأدلة في Drive لم تُحذف.'};
 }
 /* كالسابق، ويُصفّر أيضًا محطات كل مشرف ومساعده حتى يبدأ مساعدو الإشراف الإسناد من الصفر. */
 function resetForLiveTrialWithAssignments(){
-  requireEditorRun_();
+  requireEditorRun_();requireMaintenanceUnlock_();
   const r=resetForLiveTrial();
   const sh=getDb_().getSheetByName(APP.SHEETS.USERS),now=new Date();let n=0;
   sheetObjects_(sh).forEach(function(u){
