@@ -4,7 +4,7 @@
    ===================================================================== */
 
 const APP = Object.freeze({
-  VERSION: '9.2.0',
+  VERSION: '9.3.0',
   NAME: 'منصة الرقابة والزيارات الميدانية',
   COMPANY: 'شركة الدريس للخدمات البترولية والنقليات',
   DB_PROP: 'ALDREES_CHECKLIST_DB_ID',
@@ -137,7 +137,7 @@ const EXPECTED_FUNCTIONS_ = Object.freeze({
   'Code.gs':['doGet','login','resumeSession','getServerHealth','teamOf_','chainAbove_','inTeam_'],
   'Visits.gs':['getDashboard','searchStations','getStation','getChecklist','saveVisit','getMyVisits','getVisitDetail','adminListVisits','approveVisit','getApprovalQueue','getMySchedule','getMyIssues','submitIssueResolution','verifyIssueResolution','adminListIssues','adminListVisitPlans','adminSaveVisitPlan','calculatePlanMetrics_','adminUnlockVisitType','adminRevokeVisitUnlock','adminListVisitUnlocks','listApproverCandidates','adminReassignApprover','sessionForUser_','getBadgeCounts','markAllNotificationsRead','setIssuePriority','getStationIssueLog','createVisitRequest','listVisitRequests','reassignVisitRequest','cancelVisitRequest','getMyTeam'],
   'Workflow.gs':['runWorkflowMonitor','installWorkflowTrigger','resolveApproverForSupervisor_','updatePlanAfterVisit_','nextDueFromAnchor_','getVisitGate','assertVisitTypeAllowed_','satisfyLowerPriorityPlans_','visitAnchorDate_','visitCycleInfo_','visitGateForRows_','markVisitUnlockUsed_','escalateIssues_','alertLateDailyVisits_','canActOnIssue_'],
-  'Admin.gs':['getAdminDashboard','adminBootstrap','adminListUsers','adminSaveUser','adminListRoles','adminSaveRole','adminListChecklist','adminSaveChecklistItem','getStationAssignmentMeta','listStationAssignments','requestStationAssignment','requestStationAssignments','decideStationAssignment','decideStationAssignments'],
+  'Admin.gs':['getAdminDashboard','adminBootstrap','adminListUsers','adminSaveUser','adminListRoles','adminSaveRole','adminSearchStations','adminSaveStation','adminListChecklist','adminSaveChecklistItem','exportDashboardReport','adminImportUsers','seedSettings_','seedRoles_','seedRolePermissions_','roleDefaults_','isFixedRole_'],
   'Supervisors.gs':['getStationAssignmentPanel','assignStationsToSupervisor','getOrgStructure','setUserParent','getSupervisors','getSupervisorDetail'],
   'Support.gs':['getTicketMeta','createTicket','listMyTickets','getTicket','replyTicket','adminListTickets','adminUpdateTicket']
 });
