@@ -172,6 +172,12 @@ function doGet() {
 function include_(name) {
   return HtmlService.createHtmlOutputFromFile(name).getContent();
 }
+/* V9.5.1: ملف واجهة اختياري — إن لم يوجد (مثل LangUI.html قبل إضافته) لا تنهار الصفحة،
+   بل تُعلَّم الواجهة بأن الملف ناقص فتعرض تنبيهًا واضحًا وتعمل بالعربية. */
+function includeOptional_(name) {
+  try { return include_(name); }
+  catch (e) { return '<script>window.__MISSING_UI_FILE=(window.__MISSING_UI_FILE||[]).concat([' + JSON.stringify(String(name)) + ']);</script>'; }
+}
 
 /* V6.2 security: maintenance functions can only run from the Apps Script editor by the project owner,
    never from the web app client (google.script.run) — otherwise anyone opening the link could reset the admin. */
