@@ -4,7 +4,7 @@
    ===================================================================== */
 
 const APP = Object.freeze({
-  VERSION: '9.0.0',
+  VERSION: '9.1.0',
   NAME: 'منصة الرقابة والزيارات الميدانية',
   COMPANY: 'شركة الدريس للخدمات البترولية والنقليات',
   DB_PROP: 'ALDREES_CHECKLIST_DB_ID',
@@ -138,7 +138,7 @@ const EXPECTED_FUNCTIONS_ = Object.freeze({
   'Visits.gs':['getDashboard','searchStations','getStation','getChecklist','saveVisit','getMyVisits','getVisitDetail','adminListVisits','approveVisit','getApprovalQueue','getMySchedule','getMyIssues','submitIssueResolution','verifyIssueResolution','adminListIssues','adminListVisitPlans','adminSaveVisitPlan','calculatePlanMetrics_','adminUnlockVisitType','adminRevokeVisitUnlock','adminListVisitUnlocks','listApproverCandidates','adminReassignApprover','sessionForUser_','getBadgeCounts','markAllNotificationsRead','setIssuePriority','getStationIssueLog','createVisitRequest','listVisitRequests','reassignVisitRequest','cancelVisitRequest','getMyTeam'],
   'Workflow.gs':['runWorkflowMonitor','installWorkflowTrigger','resolveApproverForSupervisor_','updatePlanAfterVisit_','nextDueFromAnchor_','getVisitGate','assertVisitTypeAllowed_','satisfyLowerPriorityPlans_','visitAnchorDate_','visitCycleInfo_','visitGateForRows_','markVisitUnlockUsed_','escalateIssues_','alertLateDailyVisits_','canActOnIssue_'],
   'Admin.gs':['getAdminDashboard','adminBootstrap','adminListUsers','adminSaveUser','adminListRoles','adminSaveRole','adminListChecklist','adminSaveChecklistItem','getStationAssignmentMeta','listStationAssignments','requestStationAssignment','requestStationAssignments','decideStationAssignment','decideStationAssignments'],
-  'Supervisors.gs':['getSupervisors','getSupervisorDetail'],
+  'Supervisors.gs':['getStationAssignmentPanel','assignStationsToSupervisor','getSupervisors','getSupervisorDetail'],
   'Support.gs':['getTicketMeta','createTicket','listMyTickets','getTicket','replyTicket','adminListTickets','adminUpdateTicket']
 });
 function getServerHealth(token) {
@@ -247,6 +247,7 @@ function setupOrUpgradeV4_() {
   const folder = ensureEvidenceFolder_();
   if (typeof migrateWorkflowData_ === 'function') migrateWorkflowData_();
   if (typeof migrateSupervisorStationScope_ === 'function') migrateSupervisorStationScope_();
+  renameSupervisorRoleV9_(ss);
   if (typeof ensureWorkflowTrigger_ === 'function') ensureWorkflowTrigger_();
   invalidateAllSheetCache_();
 
@@ -1081,3 +1082,44 @@ function normalizeText_(v){return String(v==null?'':v).trim();}
 function toBool_(v){if(v===true||v===1)return true;const s=String(v||'').toLowerCase();return s==='true'||s==='1'||s==='yes'||s==='نعم';}
 function sanitizeFileName_(name){return String(name||'file').replace(/[\\/:*?"<>|#%{}~]/g,'_').slice(0,120);}
 function styleReportHeader_(range){range.setBackground('#009DDF').setFontColor('#FFFFFF').setFontWeight('bold');}
+
+/* =========================================================
+   V9.1: مسمى الدور «مشرف المحطات» + تصفير بيانات التجربة
+   ========================================================= */
+function renameSupervisorRoleV9_(ss){
+  try{
+    const sh=ss.getSheetByName(APP.SHEETS.ROLES);if(!sh)return;
+    const rows=sheetObjects_(sh),r=rows.filter(function(x){return String(x.ROLE_ID||'')==='SUPERVISOR';})[0];
+    if(r&&String(r.ROLE_NAME||'')!=='مشرف المحطات'){updateRowsByKeys_(sh,{ROLE_ID:'SUPERVISOR'},{ROLE_NAME:'مشرف المحطات',UPDATED_AT:new Date()});invalidateSheet_(APP.SHEETS.ROLES);}
+  }catch(e){}
+}
+/* يمسح كل البيانات التشغيلية (زيارات، ملاحظات، إشعارات، خطط، طلبات، فتح، تذاكر، سجل) ويُبقي
+   المستخدمين والأدوار والصلاحيات والمحطات وقوائم التحقق والإعدادات. يُنفَّذ من المحرر فقط. */
+const RESET_SHEETS_=Object.freeze(['VISITS','DETAILS','ISSUES','ISSUE_UPDATES','VISIT_PLANS','AUDIT','NOTIFICATIONS','TICKETS','TICKET_MESSAGES','STATION_ASSIGNMENTS','VISIT_UNLOCKS','VISIT_REQUESTS']);
+function resetForLiveTrial(){
+  requireEditorRun_();
+  const ss=getDb_(),out={};
+  RESET_SHEETS_.forEach(function(k){
+    const name=APP.SHEETS[k],sh=ss.getSheetByName(name);if(!sh){out[name]='غير موجودة';return}
+    const last=sh.getLastRow();
+    if(last>1)sh.deleteRows(2,last-1);
+    out[name]=(last>1?last-1:0)+' صف حُذف';
+    invalidateSheet_(name);
+  });
+  invalidateAllSheetCache_();
+  Object.keys(MEMO_).forEach(function(k){delete MEMO_[k];});
+  try{audit_(APP.ADMIN.computerNo,'RESET_FOR_LIVE_TRIAL','','تصفير البيانات التشغيلية قبل التجربة الفعلية');}catch(e){}
+  return {ok:true,cleared:out,note:'بقيت بيانات المستخدمين والأدوار والمحطات وقوائم التحقق والإعدادات. صور الأدلة في Drive لم تُحذف.'};
+}
+/* كالسابق، ويُصفّر أيضًا محطات كل مشرف ومساعده حتى يبدأ مساعدو الإشراف الإسناد من الصفر. */
+function resetForLiveTrialWithAssignments(){
+  requireEditorRun_();
+  const r=resetForLiveTrial();
+  const sh=getDb_().getSheetByName(APP.SHEETS.USERS),now=new Date();let n=0;
+  sheetObjects_(sh).forEach(function(u){
+    if(normalizeRoleId_(u.ROLE_ID||u.ROLE||'')!=='SUPERVISOR')return;
+    updateRowsByKeys_(sh,{COMPUTER_NO:String(u.COMPUTER_NO||'')},{STATION_NOS:'',APPROVER_COMPUTER_NO:'',SCOPE_MODE:'STATIONS',UPDATED_AT:now});n++;
+  });
+  invalidateSheet_(APP.SHEETS.USERS);Object.keys(MEMO_).forEach(function(k){delete MEMO_[k];});
+  r.supervisorsCleared=n;return r;
+}

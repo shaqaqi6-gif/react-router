@@ -407,6 +407,23 @@ td strong{color:var(--dark);font-weight:600}
 .collapse.open .collapse-chev{transform:rotate(-90deg)}
 .collapse-body{display:none;padding:0 14px 14px;border-top:1px solid var(--line)}
 .collapse.open .collapse-body{display:block}
+/* V9.1: إسناد المحطات المباشر */
+.asg-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:12px;padding-top:12px}
+.asg-card{border:1px solid var(--line);border-radius:var(--r-md);background:#fff;padding:14px;display:grid;gap:10px;transition:box-shadow .2s,transform .2s}
+.asg-card:hover{box-shadow:var(--sh-md);transform:translateY(-1px)}
+.asg-card.mine{border-inline-start:4px solid var(--ok)}
+.asg-head{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.asg-name{display:grid;flex:1;min-width:120px}.asg-name strong{font-size:14px}.asg-name span{font-size:12px;color:var(--muted)}
+.asg-chips{display:flex;flex-wrap:wrap;gap:6px;min-height:28px}
+.asg-chips.editable{padding:8px;border:1px dashed var(--line-strong);border-radius:var(--r-sm);background:var(--surface-2)}
+.st-chip{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:999px;background:var(--blue-50);color:var(--dark);font-size:12px;border:1px solid var(--blue-100)}
+.st-chip b{color:var(--blue-600);font-weight:700}
+.st-chip .st-x{border:0;background:transparent;color:var(--muted);font-size:15px;line-height:1;padding:0 2px;cursor:pointer;border-radius:50%}
+.st-chip .st-x:hover{color:var(--bad);background:var(--bad-50)}
+.asg-foot{font-size:12px}
+.btn-sm{padding:6px 12px;font-size:12px}
+.warn-text{color:var(--warn);font-weight:700}
+.modal-actions{display:flex;gap:8px;margin-top:6px}
 /* V9: رابط سجل المحطة داخل بطاقة المحطة */
 .station-log-link{position:absolute;bottom:10px;left:12px;font-size:11px;color:var(--blue);font-weight:700;padding:2px 8px;border-radius:999px;background:var(--blue-50)}
 .station-log-link:hover{background:var(--blue-100)}
@@ -804,7 +821,7 @@ input[type="file"]{width:100%}
 }
 /* V8.2.2 — كناري اكتمال اللصق: آخر قاعدة في الملف.
    لو وصل Index ناقصًا فلن تُعرّف هذه الخاصية، وتكشفها الواجهة عند الدخول. */
-:root{--ui-css-complete:1;--ui-version:"9.0.0"}
+:root{--ui-css-complete:1;--ui-version:"9.1.0"}
 @media print{
   .topbar,.sidebar,.footer-actions,.page-actions,.btn{display:none!important}
   .workspace{display:block;padding:0}

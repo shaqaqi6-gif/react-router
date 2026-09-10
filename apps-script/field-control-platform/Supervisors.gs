@@ -88,3 +88,80 @@ function getSupervisorDetail(token,computerNo,filters){
     stationGates:stationGates,canManageUnlocks:canManageUnlocks
   };
 }
+
+/* =========================================================
+   V9.1: إسناد المحطات المباشر — بلا طلبات ولا اعتماد
+   مساعد الإشراف يضع المحطات لمشرفيه مباشرة، وينتقل المشرف تلقائيًا تحت اسم
+   المساعد الذي أسند له. مدير النظام ومدير العمليات يستطيعان الإسناد أيضًا
+   مع اختيار المساعد عند الحاجة.
+   ========================================================= */
+const STATION_ASSIGN_ROLES_=Object.freeze(['APPROVAL_ASSISTANT','SYSTEM_ADMIN','OPERATIONS_MANAGER','OPERATIONS_DEPUTY']);
+function requireStationAssigner_(s){
+  if(STATION_ASSIGN_ROLES_.indexOf(s.roleId)===-1)throw new Error('إسناد المحطات لمساعد الإشراف أو مدير العمليات أو مدير النظام فقط.');
+}
+function getStationAssignmentPanel(token){
+  const s=requireSession_(token);requireStationAssigner_(s);
+  const users=sheetObjects_(getDb_().getSheetByName(APP.SHEETS.USERS)).filter(function(u){return toBool_(u.ACTIVE);});
+  const byNo={};users.forEach(function(u){byNo[String(u.COMPUTER_NO||'')]=u;});
+  const supervisors=users.filter(function(u){return normalizeRoleId_(u.ROLE_ID||u.ROLE||'')==='SUPERVISOR';}).map(function(u){
+    const no=String(u.COMPUTER_NO||''),asst=String(u.APPROVER_COMPUTER_NO||''),au=byNo[asst];
+    const nos=csvArray_(u.STATION_NOS);
+    return{computerNo:no,name:String(u.NAME||''),phone:String(u.PHONE||''),assistantComputerNo:asst,assistantName:au?String(au.NAME||''):'',
+      isMine:asst===s.computerNo,unassigned:!asst,
+      stations:nos.map(function(x){const st=findStation_(x);return{stationNo:x,stationName:st?st.stationName:('محطة '+x),region:st?st.region:''};})};
+  }).sort(function(a,b){const ra=a.isMine?0:(a.unassigned?1:2),rb=b.isMine?0:(b.unassigned?1:2);if(ra!==rb)return ra-rb;return a.name.localeCompare(b.name,'ar');});
+  const assistants=users.filter(function(u){return normalizeRoleId_(u.ROLE_ID||u.ROLE||'')==='APPROVAL_ASSISTANT';}).map(function(u){return{computerNo:String(u.COMPUTER_NO||''),name:String(u.NAME||'')};});
+  // من يملك كل محطة الآن (لكشف التعارض قبل الحفظ)
+  const owners={};supervisors.forEach(function(sp){sp.stations.forEach(function(st){owners[st.stationNo]=sp.computerNo;});});
+  return {me:{computerNo:s.computerNo,name:s.name,roleId:s.roleId,isAssistant:s.roleId==='APPROVAL_ASSISTANT'},supervisors:supervisors,assistants:assistants,owners:owners};
+}
+/* يستبدل قائمة محطات المشرف كاملة بالقائمة المرسلة، ويجعله تحت المساعد المُسنِد.
+   المحطة المسندة لمشرف آخر تُنقل منه (نقل مباشر) وتُسجَّل في سجل الإسناد. */
+function assignStationsToSupervisor(token,supervisorComputerNo,stationNos,assistantComputerNo){
+  const s=requireSession_(token);requireStationAssigner_(s);
+  supervisorComputerNo=limitText_(normalizeText_(supervisorComputerNo),32);
+  const su=findUserByComputerNo_(supervisorComputerNo);
+  if(!su||!toBool_(su.ACTIVE)||normalizeRoleId_(su.ROLE_ID||su.ROLE||'')!=='SUPERVISOR')throw new Error('المشرف غير موجود أو غير نشط.');
+  const wanted=[];const seen={};
+  (Array.isArray(stationNos)?stationNos:csvArray_(stationNos)).forEach(function(x){
+    const no=limitText_(normalizeText_(x),40);if(!no||seen[no])return;
+    const st=findStation_(no);if(!st)throw new Error('المحطة '+no+' غير موجودة.');
+    seen[no]=true;wanted.push(no);
+  });
+  if(wanted.length>200)throw new Error('الحد الأقصى 200 محطة للمشرف الواحد.');
+  // المساعد الذي سيصبح المشرف تحته
+  let asst='';
+  if(s.roleId==='APPROVAL_ASSISTANT')asst=s.computerNo;
+  else{
+    asst=limitText_(normalizeText_(assistantComputerNo),32)||String(su.APPROVER_COMPUTER_NO||'');
+    if(asst){const au=findUserByComputerNo_(asst);if(!au||!toBool_(au.ACTIVE)||normalizeRoleId_(au.ROLE_ID||au.ROLE||'')!=='APPROVAL_ASSISTANT')throw new Error('مساعد الإشراف المحدد غير موجود أو غير نشط.');}
+  }
+  const lock=LockService.getScriptLock();lock.waitLock(15000);
+  try{
+    const ss=getDb_(),ush=ss.getSheetByName(APP.SHEETS.USERS),now=new Date();
+    const before=csvArray_(su.STATION_NOS);
+    // انزع المحطات المنقولة من مشرفين آخرين
+    const moved=[];
+    sheetObjects_(ush).forEach(function(u){
+      const no=String(u.COMPUTER_NO||'');if(no===supervisorComputerNo)return;
+      if(normalizeRoleId_(u.ROLE_ID||u.ROLE||'')!=='SUPERVISOR')return;
+      const cur=csvArray_(u.STATION_NOS),keep=cur.filter(function(x){return wanted.indexOf(x)===-1;});
+      if(keep.length!==cur.length){updateRowsByKeys_(ush,{COMPUTER_NO:no},{STATION_NOS:keep.join(','),UPDATED_AT:now});moved.push({from:no,stations:cur.filter(function(x){return wanted.indexOf(x)!==-1;})});clearSupervisorStationMemo_(no);}
+    });
+    const patch={STATION_NOS:wanted.join(','),SCOPE_MODE:'STATIONS',UPDATED_AT:now};
+    if(asst)patch.APPROVER_COMPUTER_NO=asst;
+    updateRowsByKeys_(ush,{COMPUTER_NO:supervisorComputerNo},patch);
+    clearSupervisorStationMemo_(supervisorComputerNo);
+    // سجل الإسناد: صف معتمد لكل محطة أُضيفت (للتتبع فقط)
+    const ash=ss.getSheetByName(APP.SHEETS.STATION_ASSIGNMENTS);
+    if(ash){wanted.filter(function(x){return before.indexOf(x)===-1;}).forEach(function(x){
+      appendObject_(ash,{ASSIGNMENT_ID:'ASG-'+Utilities.getUuid().slice(0,8),SUPERVISOR_COMPUTER_NO:supervisorComputerNo,STATION_NO:x,REQUESTED_BY:s.computerNo,REQUESTED_AT:now,STATUS:'APPROVED',APPROVED_BY:s.computerNo,APPROVED_AT:now,DECISION_COMMENT:'إسناد مباشر'});
+    });}
+    invalidateSheet_(APP.SHEETS.USERS);Object.keys(MEMO_).forEach(function(k){if(k.indexOf('TEAM_')===0)delete MEMO_[k];});
+    audit_(s.computerNo,'STATION_ASSIGN_DIRECT',supervisorComputerNo,'stations='+wanted.join(',')+(asst?(' assistant='+asst):'')+(moved.length?(' moved='+JSON.stringify(moved)):''));
+    const added=wanted.filter(function(x){return before.indexOf(x)===-1;}),removed=before.filter(function(x){return wanted.indexOf(x)===-1;});
+    if(added.length||removed.length)notify_(supervisorComputerNo,'STATIONS_ASSIGNED','تحديث محطاتك','أصبحت محطاتك '+wanted.length+' محطة'+(added.length?(' — أُضيفت: '+added.join('، ')):'')+(removed.length?(' — أُزيلت: '+removed.join('، ')):'')+'.','',s.computerNo);
+    moved.forEach(function(m){notify_(m.from,'STATIONS_ASSIGNED','نُقلت محطات من قائمتك','نُقلت المحطات '+m.stations.join('، ')+' إلى مشرف آخر.','',s.computerNo);});
+    return {ok:true,stations:wanted,added:added,removed:removed,moved:moved,assistantComputerNo:asst};
+  }finally{lock.releaseLock();}
+}
