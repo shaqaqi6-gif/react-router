@@ -222,6 +222,43 @@ function upgradeSystemV4() {
   return setupOrUpgradeV4_();
 }
 
+/* V9.7.1: تشخيص الترقية خطوة بخطوة — يكتب في سجل التنفيذ (console.log يظهر حتى لو انهار التنفيذ)
+   اسم الخطوة وزمنها، فنعرف أين يقع خطأ Error code INTERNAL. يُشغَّل من المحرر فقط، وكل خطوة آمنة للتكرار. */
+function DIAG_UPGRADE() {
+  requireEditorRun_();
+  const t0 = Date.now(); let last = t0;
+  const step = function(name, fn) {
+    console.log('▶ ' + name + ' …');
+    const r = fn();
+    const now = Date.now();
+    console.log('✓ ' + name + ' (' + Math.round((now - last) / 100) / 10 + 's)');
+    last = now; return r;
+  };
+  const props = PropertiesService.getScriptProperties();
+  step('pepper', function(){ if (!props.getProperty(APP.PEPPER_PROP)) props.setProperty(APP.PEPPER_PROP, Utilities.getUuid() + Utilities.getUuid()); });
+  const ss = step('open db', function(){ const id = props.getProperty(APP.DB_PROP); return id ? SpreadsheetApp.openById(id) : null; });
+  if (!ss) { console.log('لا توجد قاعدة بيانات — شغّل setupSystem'); return; }
+  const sheets = ['USERS','ROLES','ROLE_PERMISSIONS','USER_OVERRIDES','STATIONS','CHECKLIST','VISITS','DETAILS','ISSUES','ISSUE_UPDATES','VISIT_PLANS','AUDIT','SETTINGS','NOTIFICATIONS','TICKETS','TICKET_MESSAGES','STATION_ASSIGNMENTS','VISIT_UNLOCKS','VISIT_REQUESTS'];
+  sheets.forEach(function(k){ step('sheet ' + k, function(){ ensureSheet_(ss, APP.SHEETS[k], HEADERS[k]); }); });
+  step('sheet TRANSLATIONS', function(){ if (typeof ensureTranslationsSheet_ === 'function') ensureTranslationsSheet_(ss); });
+  step('seedSettings_', function(){ seedSettings_(ss); });
+  step('seedRoles_', function(){ seedRoles_(ss); });
+  step('seedRolePermissions_', function(){ seedRolePermissions_(ss); });
+  step('seedBootstrapAdmin_', function(){ return seedBootstrapAdmin_(ss); });
+  step('migrateLegacyUsers_', function(){ migrateLegacyUsers_(ss); });
+  step('seedChecklist_', function(){ seedChecklist_(ss); });
+  step('seedInitialStations_', function(){ return seedInitialStations_(ss); });
+  step('ensureEvidenceFolder_', function(){ return ensureEvidenceFolder_(); });
+  step('migrateWorkflowData_', function(){ if (typeof migrateWorkflowData_ === 'function') migrateWorkflowData_(); });
+  step('migrateSupervisorStationScope_', function(){ if (typeof migrateSupervisorStationScope_ === 'function') migrateSupervisorStationScope_(); });
+  step('renameSupervisorRoleV9_', function(){ renameSupervisorRoleV9_(ss); });
+  step('applyRoleMatrixV92_', function(){ applyRoleMatrixV92_(ss); });
+  step('ensureWorkflowTrigger_', function(){ if (typeof ensureWorkflowTrigger_ === 'function') ensureWorkflowTrigger_(); });
+  step('invalidateAllSheetCache_', function(){ invalidateAllSheetCache_(); });
+  console.log('✔ كل الخطوات نجحت خلال ' + Math.round((Date.now() - t0) / 1000) + ' ثانية — الترقية مكتملة فعليًا.');
+  return { ok: true, seconds: Math.round((Date.now() - t0) / 1000) };
+}
+
 function setupOrUpgradeV4_() {
   const props = PropertiesService.getScriptProperties();
   if (!props.getProperty(APP.PEPPER_PROP)) {
