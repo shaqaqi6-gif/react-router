@@ -635,7 +635,8 @@ function seedSettings_(ss){
     GPS_MAX_ACCURACY_METERS:'250',
     PLAN_GRACE_DAYS:'0',
     WORKFLOW_MONITOR_HOURS:'1',
-    VISIT_PRIORITY_MODE:'MONTHLY_BIWEEKLY_DAILY'
+    VISIT_PRIORITY_MODE:'MONTHLY_BIWEEKLY_DAILY',
+    PHOTO_LIVE_ONLY:'TRUE'
   };
   Object.keys(defaults).forEach(function(k){
     if(!existing[k])appendObject_(sh,{KEY:k,VALUE:defaults[k],UPDATED_AT:new Date()});

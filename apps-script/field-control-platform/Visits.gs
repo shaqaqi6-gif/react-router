@@ -152,7 +152,17 @@ function evidenceFileName_(fileName,fallback,ext){
   name=name.replace(/\.[A-Za-z0-9]{1,5}$/,'');
   return (name||fallback)+'.'+ext;
 }
-function uploadEvidence(token,visitId,itemId,dataUrl,fileName){
+/* V9.7: الصورة الحية فقط — وقت الالتقاط (من الواجهة: EXIF أو وقت الملف) يجب أن يقع بين «منذ» والآن بهامش 10 دقائق.
+   يُعطَّل بالإعداد PHOTO_LIVE_ONLY=FALSE إذا احتاج جهاز بعينه ذلك. لا يمكن للخادم التأكد من صدق الوقت المرسل،
+   لكنه يمنع الاستخدام العادي للمعرض ويكشف الصور القديمة. */
+function assertLivePhoto_(takenAt,sinceDate){
+  if(String(settingValue_('PHOTO_LIVE_ONLY','TRUE')).toUpperCase()==='FALSE')return;
+  const t=asDate_(takenAt);
+  if(!t)throw new Error('الصورة يجب أن تُلتقط الآن بالكاميرا — لم يُتعرَّف على وقت التقاطها.');
+  const now=Date.now(),since=sinceDate?sinceDate.getTime():now-3600000;
+  if(t.getTime()<since-600000||t.getTime()>now+600000)throw new Error('الصورة يجب أن تُلتقط الآن بالكاميرا أثناء الزيارة — لا تُقبل صورة قديمة من المعرض.');
+}
+function uploadEvidence(token,visitId,itemId,dataUrl,fileName,takenAt){
   const session=requireSession_(token);
   visitId=limitText_(normalizeText_(visitId),80); itemId=limitText_(normalizeText_(itemId),80);
   const visit=findVisitObjectById_(visitId); if(!visit)throw new Error('الزيارة غير موجودة.');
@@ -165,6 +175,7 @@ function uploadEvidence(token,visitId,itemId,dataUrl,fileName){
     requirePermissionAny_(session,['VISIT_APPROVE','ISSUE_MANAGE']);
     if(!visitAllowed_(session,visit)&&!canApproveVisit_(session,visit))throw new Error('الزيارة خارج نطاقك.');
   }
+  if(isOwner)assertLivePhoto_(takenAt,asDate_(visit.STARTED_AT)||asDate_(visit.DATE));
   const img=decodeEvidenceImage_(dataUrl);
   const root=ensureEvidenceFolder_(), vf=getOrCreateChildFolder_(root,sanitizeFileName_(visitId));
   const file=vf.createFile(Utilities.newBlob(img.bytes,img.mime,evidenceFileName_(fileName,itemId||'evidence',img.ext))); const url=file.getUrl();
@@ -600,7 +611,7 @@ function submitIssueResolution(token,issueId,payload){const s=requireSession_(to
     if(!own&&!(hasPermission_(s,'ISSUE_MANAGE')&&issueAllowed_(s,x)))throw new Error('هذه الملاحظة ليست ضمن مسؤوليتك.');
     const st=String(x.STATUS||'');
     if(ISSUE_RESOLVABLE_.indexOf(st)===-1)throw new Error(st==='AWAITING_VERIFICATION'?'المعالجة مرسلة وبانتظار تحقق المساعد.':(st==='CLOSED'?'الملاحظة مغلقة.':'الملاحظة ليست في حالة تسمح بإرسال معالجة.'));
-    let photo='';if(payload.photoData){photo=saveIssueResolutionPhoto_(issueId,payload.photoData,payload.fileName||'resolution.jpg');}
+    let photo='';if(payload.photoData){if(own)assertLivePhoto_(payload.takenAt,null);photo=saveIssueResolutionPhoto_(issueId,payload.photoData,payload.fileName||'resolution.jpg');}
     const now=new Date(),patch={STATUS:'AWAITING_VERIFICATION',REMEDIATION_SUBMITTED_AT:now,REMEDIATION_NOTE:note,LAST_UPDATED_AT:now,RETURN_REASON:''};
     if(photo)patch.REMEDIATION_PHOTO_URL=photo;
     updateRowsByKeys_(ish,{ISSUE_ID:issueId},patch);
