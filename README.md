@@ -53,9 +53,14 @@ npm run preview  # معاينة ناتج البناء محليًا
 - الإصدار: دالة `netlify/functions/wallet-pass.js` تبني حزمة `.pkpass` موقّعة عند الطلب.
 - البناء محليًا: `npm run pass` (أو `npm run pass -- --demo` لاختبار خط الإنتاج بشهادة تجريبية).
 
-تفعيل زر Wallet يتطلّب شهادة **Pass Type ID** من حساب مطوّر Apple تُرفع كمتغيّرات بيئة
-على Netlify. الخطوات كاملة في **[`docs/APPLE_WALLET_AR.md`](docs/APPLE_WALLET_AR.md)**.
-بدون الشهادة تبقى الصفحة عاملة عبر vCard ورمز QR على كل الأجهزة.
+لتفعيل زر Wallet اختر أحد وضعَي التوقيع:
+
+1. **خدمة توقيع خارجية** (بدون حساب مطوّر Apple): `PASS_PROVIDER=pass2u` مع
+   `PASS2U_API_KEY` و`PASS2U_MODEL_ID` — أو `PASS_PROVIDER=custom` لأي خدمة أخرى.
+2. **شهادة Pass Type ID** من حساب مطوّر Apple — بطاقة باسم الشركة بالكامل.
+
+الخطوات كاملة في **[`docs/APPLE_WALLET_AR.md`](docs/APPLE_WALLET_AR.md)**.
+بدون أي منهما تبقى الصفحة عاملة عبر vCard ورمز QR على كل الأجهزة.
 
 ## ملاحظات أمنية مهمّة
 

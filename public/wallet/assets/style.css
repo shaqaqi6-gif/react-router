@@ -136,6 +136,22 @@ body {
   box-shadow: var(--shadow);
 }
 .setup h2 { margin: 0 0 8px; font-size: 1.04rem; color: var(--brand-dark); }
+.setup .option {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.setup .option h3 { margin: 0 0 8px; font-size: .94rem; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.setup .option p:last-child { margin-bottom: 0; }
+.setup .tag {
+  background: rgba(0, 157, 222, .12);
+  color: var(--brand-dark);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: .72rem;
+  font-weight: 600;
+}
 .setup p { margin: 0 0 10px; font-size: .9rem; }
 .setup ol { margin: 0 0 10px; padding-inline-start: 20px; font-size: .9rem; }
 .setup li { margin-bottom: 6px; }

@@ -60,15 +60,16 @@
     .then(function (r) { return r.json(); })
     .then(function (info) {
       if (info && info.ready) {
-        status.textContent = 'البطاقة جاهزة. على iPhone: اضغط الزر ثم «إضافة» في أعلى شاشة Wallet.';
+        var via = info.mode && info.mode.indexOf('provider') === 0 ? ' (عبر خدمة توقيع خارجية)' : '';
+        status.textContent = 'البطاقة جاهزة' + via + '. على iPhone: اضغط الزر ثم «إضافة» في أعلى شاشة Wallet.';
         status.className = 'status ok';
         return;
       }
-      if (info && info.missing && info.missing.length) {
-        fail('زر Apple Wallet غير مفعّل بعد — ينقص الإعداد على الاستضافة.', 'متغيّرات ناقصة: ' + info.missing.join('، '));
-        return;
-      }
-      fail('زر Apple Wallet غير مفعّل بعد.', (info && (info.detail || (info.warnings || []).join('، '))) || '');
+      var detail = '';
+      if (info && info.missing && info.missing.length) detail = 'متغيّرات ناقصة: ' + info.missing.join('، ');
+      else if (info && info.detail) detail = info.detail;
+      else if (info && info.warnings && info.warnings.length) detail = info.warnings.join('، ');
+      fail('زر Apple Wallet غير مفعّل بعد — ينقص الإعداد على الاستضافة.', detail);
     })
     .catch(function () {
       fail('تعذّر الوصول إلى خدمة إصدار البطاقة (هل الموقع منشور على Netlify؟).', '');

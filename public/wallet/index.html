@@ -63,23 +63,41 @@
     <p class="status" id="status" role="status">جارٍ التحقق من جاهزية إصدار بطاقة Apple Wallet…</p>
   </section>
 
-  <!-- يظهر فقط إذا لم تُضبط شهادات Apple على الاستضافة -->
+  <!-- يظهر فقط إذا لم تُضبط جهة توقيع على الاستضافة -->
   <section class="setup" id="setup" hidden>
     <h2>خطوة واحدة متبقّية لتفعيل زر Apple Wallet</h2>
     <p>
-      نظام Apple لا يقبل أي بطاقة داخل Wallet إلا إذا كانت موقّعة بشهادة
-      <b>Pass Type ID</b> صادرة من حساب مطوّر Apple (الاشتراك 99 دولارًا سنويًا).
-      التطبيق جاهز بالكامل، وينقصه رفع الشهادة إلى إعدادات الاستضافة.
+      نظام Apple لا يقبل أي بطاقة داخل Wallet إلا موقّعة بشهادة معتمدة.
+      التطبيق جاهز بالكامل، وينقصه اختيار جهة التوقيع من الخيارين التاليين
+      وإضافة متغيّراتها في <span dir="ltr">Netlify → Site settings → Environment variables</span>.
     </p>
-    <ol>
-      <li>أنشئ <b>Pass Type ID</b> وشهادته من <span dir="ltr">developer.apple.com → Certificates, Identifiers &amp; Profiles</span>.</li>
-      <li>صدّر الشهادة مع مفتاحها الخاص من «Keychain Access» كملف <span dir="ltr">.p12</span>.</li>
-      <li>نزّل شهادة <span dir="ltr">Apple WWDR</span> الوسيطة وحوّلها إلى <span dir="ltr">PEM</span>.</li>
-      <li>أضف المتغيّرات في <span dir="ltr">Netlify → Site settings → Environment variables</span>:
-        <code dir="ltr">PASS_TYPE_IDENTIFIER · TEAM_IDENTIFIER · APPLE_WWDR_PEM · APPLE_PASS_P12_BASE64 · APPLE_PASS_P12_PASSWORD</code>
-      </li>
-    </ol>
-    <p class="muted">الشرح التفصيلي بالصور والأوامر في ملف <code dir="ltr">docs/APPLE_WALLET_AR.md</code> داخل المستودع.</p>
+
+    <div class="option">
+      <h3>الخيار أ — خدمة توقيع خارجية <span class="tag">بدون حساب مطوّر</span></h3>
+      <ol>
+        <li>سجّل في خدمة توقيع بطاقات (مثل <span dir="ltr">Pass2U</span>) واحصل على مفتاح <span dir="ltr">API</span> مجاني.</li>
+        <li>أنشئ «نموذج بطاقة» في لوحتها بألوان الدريس، وارفع صور البطاقة من مجلد <code dir="ltr">assets/pass/</code>.</li>
+        <li>أضف المتغيّرات:
+          <code dir="ltr">PASS_PROVIDER=pass2u · PASS2U_API_KEY · PASS2U_MODEL_ID</code>
+        </li>
+      </ol>
+      <p class="muted">أسرع طريق للتشغيل. ملاحظة: تمرّ بيانات البطاقة عبر خادم الخدمة، وقد يظهر اسمها كجهة إصدار.</p>
+    </div>
+
+    <div class="option">
+      <h3>الخيار ب — شهادة الشركة من Apple <span class="tag">باسم الدريس بالكامل</span></h3>
+      <ol>
+        <li>أنشئ <b>Pass Type ID</b> وشهادته من <span dir="ltr">developer.apple.com → Certificates, Identifiers &amp; Profiles</span>.</li>
+        <li>صدّر الشهادة مع مفتاحها الخاص من «Keychain Access» كملف <span dir="ltr">.p12</span>.</li>
+        <li>نزّل شهادة <span dir="ltr">Apple WWDR</span> الوسيطة وحوّلها إلى <span dir="ltr">PEM</span>.</li>
+        <li>أضف المتغيّرات:
+          <code dir="ltr">PASS_TYPE_IDENTIFIER · TEAM_IDENTIFIER · APPLE_WWDR_PEM · APPLE_PASS_P12_BASE64 · APPLE_PASS_P12_PASSWORD</code>
+        </li>
+      </ol>
+      <p class="muted">يتطلّب اشتراك حساب مطوّر Apple (أو استخدام حساب الشركة إن كان متوفّرًا).</p>
+    </div>
+
+    <p class="muted">الشرح التفصيلي بالأوامر في ملف <code dir="ltr">docs/APPLE_WALLET_AR.md</code> داخل المستودع.</p>
     <p class="muted" id="setup-detail" hidden></p>
   </section>
 
