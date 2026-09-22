@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#009dde">
+<meta name="robots" content="noindex, nofollow">
+<title>بطاقة العمل — سامح زين | الدريس</title>
+<meta name="description" content="بطاقة عمل رقمية تُضاف إلى Apple Wallet على iPhone، مع حفظ جهة الاتصال ورمز QR للمشاركة.">
+<link rel="icon" href="assets/logo.svg">
+<link rel="stylesheet" href="assets/style.css">
+</head>
+<body>
+<main class="shell">
+
+  <header class="brand">
+    <img src="assets/logo.svg" alt="الدريس" width="132" height="64">
+    <span>بطاقة العمل الرقمية</span>
+  </header>
+
+  <!-- معاينة البطاقة كما تظهر داخل Apple Wallet -->
+  <section class="pass" aria-label="معاينة البطاقة">
+    <div class="pass-top">
+      <img class="pass-logo" src="assets/logo.svg" alt="الدريس">
+      <img class="pass-thumb" src="assets/contact-photo.png" alt="">
+    </div>
+    <div class="pass-primary">
+      <span class="lbl">الاسم</span>
+      <strong id="p-name">سامح زين</strong>
+    </div>
+    <div class="pass-row">
+      <div><span class="lbl">المسمّى الوظيفي</span><b id="p-title">مساعد مدير التشغيل</b></div>
+      <div><span class="lbl">جهة العمل</span><b id="p-org">شركة الدريس</b></div>
+    </div>
+    <div class="pass-row">
+      <div><span class="lbl">الجوال</span><b dir="ltr"><a id="p-phone" href="tel:+966541419835">0541419835</a></b></div>
+      <div><span class="lbl">البريد الإلكتروني</span><b class="email" dir="ltr"><a id="p-email" href="mailto:samehz@aldrees.com">samehz@aldrees.com</a></b></div>
+    </div>
+    <div class="pass-code">
+      <canvas id="pass-qr" width="180" height="180" aria-label="رمز QR لحفظ جهة الاتصال"></canvas>
+      <small>امسح الرمز لحفظ جهة الاتصال</small>
+    </div>
+  </section>
+
+  <!-- الإجراءات -->
+  <section class="actions" aria-label="الإجراءات">
+    <a class="wallet-btn" id="add-wallet" href="/.netlify/functions/wallet-pass">
+      <svg viewBox="0 0 24 24" aria-hidden="true" width="26" height="26">
+        <path fill="currentColor" d="M19 7H5a3 3 0 0 0-3 3v7a3 3 0 0 0 3 3h14a3 3 0 0 0 3-3v-7a3 3 0 0 0-3-3Zm1 6h-4a1.5 1.5 0 0 0 0 3h4v1a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h14a1 1 0 0 1 1 1v3ZM5.6 5.6 16 3.3a2 2 0 0 1 2.4 1.5l.1.5H5.3l.3-.2Z"/>
+      </svg>
+      <span>
+        <small>إضافة إلى</small>
+        <strong>Apple Wallet</strong>
+      </span>
+    </a>
+
+    <div class="row">
+      <a class="btn" href="assets/sameh-zein.vcf" download>حفظ جهة الاتصال</a>
+      <button class="btn" id="share" type="button">مشاركة البطاقة</button>
+      <button class="btn" id="qr-save" type="button">حفظ رمز QR</button>
+    </div>
+
+    <p class="status" id="status" role="status">جارٍ التحقق من جاهزية إصدار بطاقة Apple Wallet…</p>
+  </section>
+
+  <!-- يظهر فقط إذا لم تُضبط جهة توقيع على الاستضافة -->
+  <section class="setup" id="setup" hidden>
+    <h2>خطوة واحدة متبقّية لتفعيل زر Apple Wallet</h2>
+    <p>
+      نظام Apple لا يقبل أي بطاقة داخل Wallet إلا موقّعة بشهادة معتمدة.
+      التطبيق جاهز بالكامل، وينقصه اختيار جهة التوقيع من الخيارين التاليين
+      وإضافة متغيّراتها في <span dir="ltr">Netlify → Site settings → Environment variables</span>.
+    </p>
+
+    <div class="option">
+      <h3>الخيار أ — خدمة توقيع خارجية <span class="tag">بدون حساب مطوّر</span></h3>
+      <ol>
+        <li>سجّل في خدمة توقيع بطاقات (مثل <span dir="ltr">Pass2U</span>) واحصل على مفتاح <span dir="ltr">API</span> مجاني.</li>
+        <li>أنشئ «نموذج بطاقة» في لوحتها بألوان الدريس، وارفع صور البطاقة من مجلد <code dir="ltr">assets/pass/</code>.</li>
+        <li>أضف المتغيّرات:
+          <code dir="ltr">PASS_PROVIDER=pass2u · PASS2U_API_KEY · PASS2U_MODEL_ID</code>
+        </li>
+      </ol>
+      <p class="muted">أسرع طريق للتشغيل. ملاحظة: تمرّ بيانات البطاقة عبر خادم الخدمة، وقد يظهر اسمها كجهة إصدار.</p>
+    </div>
+
+    <div class="option">
+      <h3>الخيار ب — شهادة الشركة من Apple <span class="tag">باسم الدريس بالكامل</span></h3>
+      <ol>
+        <li>أنشئ <b>Pass Type ID</b> وشهادته من <span dir="ltr">developer.apple.com → Certificates, Identifiers &amp; Profiles</span>.</li>
+        <li>صدّر الشهادة مع مفتاحها الخاص من «Keychain Access» كملف <span dir="ltr">.p12</span>.</li>
+        <li>نزّل شهادة <span dir="ltr">Apple WWDR</span> الوسيطة وحوّلها إلى <span dir="ltr">PEM</span>.</li>
+        <li>أضف المتغيّرات:
+          <code dir="ltr">PASS_TYPE_IDENTIFIER · TEAM_IDENTIFIER · APPLE_WWDR_PEM · APPLE_PASS_P12_BASE64 · APPLE_PASS_P12_PASSWORD</code>
+        </li>
+      </ol>
+      <p class="muted">يتطلّب اشتراك حساب مطوّر Apple (أو استخدام حساب الشركة إن كان متوفّرًا).</p>
+    </div>
+
+    <p class="muted">الشرح التفصيلي بالأوامر في ملف <code dir="ltr">docs/APPLE_WALLET_AR.md</code> داخل المستودع.</p>
+    <p class="muted" id="setup-detail" hidden></p>
+  </section>
+
+  <footer>
+    زر «حفظ جهة الاتصال» ورمز QR يعملان على كل الأجهزة. زر Apple Wallet مخصّص لـ iPhone وساعة Apple.
+    <br>لا توجد أدوات تتبّع في هذه الصفحة، ولا تُرسل بياناتك لأي طرف ثالث.
+  </footer>
+
+</main>
+<script src="assets/qr-library.js"></script>
+<script src="assets/app.js"></script>
+</body>
+</html>

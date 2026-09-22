@@ -2,3 +2,12 @@
   X-Frame-Options: SAMEORIGIN
   X-Content-Type-Options: nosniff
   Referrer-Policy: no-referrer
+
+# بطاقة العمل الرقمية — أنواع محتوى دقيقة حتى يتعرّف iPhone على الملفات
+/wallet/assets/*.vcf
+  Content-Type: text/vcard; charset=utf-8
+  Cache-Control: no-cache
+
+/wallet/assets/*.pkpass
+  Content-Type: application/vnd.apple.pkpass
+  Cache-Control: no-cache

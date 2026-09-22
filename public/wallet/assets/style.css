@@ -1,0 +1,168 @@
+/* ============================================================
+   بطاقة العمل الرقمية — تنسيقات الصفحة (RTL، بلا خطوط خارجية)
+   ============================================================ */
+:root {
+  --brand: #009dde;
+  --brand-dark: #0077a8;
+  --ink: #0d1b24;
+  --muted: #5b6b76;
+  --line: #e4ebf0;
+  --bg: #f2f6f9;
+  --card: #ffffff;
+  --radius: 18px;
+  --shadow: 0 18px 44px rgba(13, 27, 36, .12);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --ink: #eef5f9;
+    --muted: #9fb2bf;
+    --line: #22323d;
+    --bg: #0b1218;
+    --card: #131e26;
+    --shadow: 0 18px 44px rgba(0, 0, 0, .45);
+  }
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  padding: 24px 16px 56px;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "SF Arabic", "Helvetica Neue", "Segoe UI", system-ui, -apple-system, sans-serif;
+  line-height: 1.7;
+  -webkit-text-size-adjust: 100%;
+}
+
+.shell { max-width: 460px; margin: 0 auto; display: grid; gap: 22px; }
+
+/* ترويسة العلامة */
+.brand { display: flex; align-items: center; gap: 12px; justify-content: center; }
+.brand img { height: 46px; width: auto; }
+.brand span { color: var(--muted); font-size: .92rem; border-inline-start: 1px solid var(--line); padding-inline-start: 12px; }
+
+/* معاينة البطاقة بأسلوب Apple Wallet */
+.pass {
+  background: linear-gradient(160deg, #00a9ee 0%, var(--brand) 48%, #0083ba 100%);
+  color: #fff;
+  border-radius: 22px;
+  padding: 18px 18px 22px;
+  box-shadow: var(--shadow);
+  display: grid;
+  gap: 16px;
+}
+
+.pass-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.pass-logo { height: 34px; filter: brightness(0) invert(1); }
+.pass-thumb { width: 54px; height: 54px; border-radius: 12px; background: #fff; object-fit: contain; padding: 4px; }
+
+.pass .lbl {
+  display: block;
+  font-size: .68rem;
+  letter-spacing: .04em;
+  color: rgba(255, 255, 255, .82);
+  text-transform: uppercase;
+}
+
+.pass-primary strong { font-size: 1.62rem; font-weight: 700; display: block; margin-top: 2px; }
+.pass-row { display: flex; gap: 14px; align-items: start; }
+.pass-row > div { flex: 1 1 0; min-width: 0; }
+.pass-row b { font-weight: 600; font-size: .92rem; display: block; overflow-wrap: anywhere; }
+.pass-row b.email { font-size: .8rem; letter-spacing: -.01em; }
+.pass-row a { color: #fff; text-decoration: none; border-bottom: 1px solid rgba(255, 255, 255, .45); }
+
+.pass-code {
+  background: #fff;
+  border-radius: 14px;
+  padding: 12px;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+}
+.pass-code canvas { width: 168px; height: 168px; image-rendering: pixelated; }
+.pass-code small { color: #44555f; font-size: .76rem; }
+
+/* الأزرار */
+.actions { display: grid; gap: 12px; }
+
+.wallet-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: #000;
+  color: #fff;
+  text-decoration: none;
+  padding: 13px 18px;
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  transition: transform .12s ease, opacity .12s ease;
+}
+.wallet-btn:active { transform: scale(.985); }
+.wallet-btn span { display: grid; line-height: 1.25; text-align: start; }
+.wallet-btn small { font-size: .74rem; opacity: .82; }
+.wallet-btn strong { font-size: 1.12rem; font-weight: 600; letter-spacing: .01em; }
+.wallet-btn[aria-disabled="true"] { background: #4a555c; opacity: .6; pointer-events: none; }
+
+.row { display: flex; flex-wrap: wrap; gap: 10px; }
+
+.btn {
+  flex: 1 1 130px;
+  text-align: center;
+  background: var(--card);
+  color: var(--ink);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 11px 12px;
+  font: inherit;
+  font-size: .95rem;
+  text-decoration: none;
+  cursor: pointer;
+}
+.btn:hover { border-color: var(--brand); color: var(--brand); }
+
+.status { margin: 2px 0 0; color: var(--muted); font-size: .86rem; min-height: 1.6em; }
+.status.error { color: #c0392b; }
+.status.ok { color: var(--brand-dark); }
+
+/* لوحة الإعداد (تظهر عند نقص الشهادات) */
+.setup {
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+}
+.setup h2 { margin: 0 0 8px; font-size: 1.04rem; color: var(--brand-dark); }
+.setup .option {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+.setup .option h3 { margin: 0 0 8px; font-size: .94rem; display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.setup .option p:last-child { margin-bottom: 0; }
+.setup .tag {
+  background: rgba(0, 157, 222, .12);
+  color: var(--brand-dark);
+  border-radius: 999px;
+  padding: 1px 9px;
+  font-size: .72rem;
+  font-weight: 600;
+}
+.setup p { margin: 0 0 10px; font-size: .9rem; }
+.setup ol { margin: 0 0 10px; padding-inline-start: 20px; font-size: .9rem; }
+.setup li { margin-bottom: 6px; }
+.setup code {
+  display: inline-block;
+  background: rgba(0, 157, 222, .09);
+  border-radius: 8px;
+  padding: 2px 7px;
+  font-size: .8rem;
+  overflow-wrap: anywhere;
+}
+.muted { color: var(--muted); font-size: .84rem; }
+
+footer { color: var(--muted); font-size: .8rem; text-align: center; }
