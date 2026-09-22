@@ -7,11 +7,14 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "pass": "node scripts/make-pkpass.mjs",
+    "pass:assets": "node scripts/build-pass-assets.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.110.0",
     "leaflet": "^1.9.4",
+    "node-forge": "^1.4.0",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {

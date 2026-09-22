@@ -24,6 +24,9 @@ npm run preview  # معاينة ناتج البناء محليًا
 ├── index.html          # هيكل الصفحة (login + topbar) ونقطة دخول Vite
 ├── vite.config.js      # إعداد البناء
 ├── netlify.toml        # أمر البناء + ترويسات الأمان لـ Netlify
+├── lib/                # مولّد بطاقة Apple Wallet (pkpass + vCard + بيانات البطاقة)
+├── scripts/            # أدوات سطر الأوامر (بناء البطاقة، توليد صورها)
+├── assets/pass/        # صور بطاقة Wallet (أيقونة/شعار/صورة مصغّرة)
 ├── public/
 │   ├── favicon.svg
 │   └── _redirects      # توجيه SPA على Netlify
@@ -40,6 +43,19 @@ npm run preview  # معاينة ناتج البناء محليًا
 1. `engine.js` يصدّر `AldreesAudit.runAudit(rows, REF, period)` ويعيد `{ AGG, STATIONS, GEO_trips }`.
 2. `data.js` يوفّر القيم الأوّلية (`initialAGG`, `initialStations`) والمراجع الثابتة.
 3. `main.js` يربط الواجهة؛ وعند رفع فاتورة جديدة يستدعي `runAudit` ويحدّث الحالة عبر `applyAudit`.
+
+## بطاقة العمل في Apple Wallet
+
+يحتوي المستودع أيضًا على تطبيق بطاقة عمل رقمية تُضاف إلى **Apple Wallet**:
+
+- الصفحة: `/wallet/` (اختصار: `/card`) — معاينة البطاقة، زر «إضافة إلى Apple Wallet»،
+  حفظ جهة الاتصال (vCard)، ومشاركة رمز QR.
+- الإصدار: دالة `netlify/functions/wallet-pass.js` تبني حزمة `.pkpass` موقّعة عند الطلب.
+- البناء محليًا: `npm run pass` (أو `npm run pass -- --demo` لاختبار خط الإنتاج بشهادة تجريبية).
+
+تفعيل زر Wallet يتطلّب شهادة **Pass Type ID** من حساب مطوّر Apple تُرفع كمتغيّرات بيئة
+على Netlify. الخطوات كاملة في **[`docs/APPLE_WALLET_AR.md`](docs/APPLE_WALLET_AR.md)**.
+بدون الشهادة تبقى الصفحة عاملة عبر vCard ورمز QR على كل الأجهزة.
 
 ## ملاحظات أمنية مهمّة
 
